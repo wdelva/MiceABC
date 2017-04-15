@@ -8,6 +8,7 @@
 #' @param uls Upper limits of the parameter ranges to be explored
 #' @param model Handle to the wrapper function that runs the simulation model
 #' @param maxiter Maximum number of iterations (waves of simulations) before the algorithm is forced to stop
+#' @param reps Number of times each parameter set is repeated
 #' @param alpha Minimum fraction of n.experiments that gets used as input data for MICE
 #' @param rel.dist.tol Maximum tolerated relative distance from target statistics (may be overwritten by alpha)
 #' @return A list with the following components: blah
@@ -19,6 +20,7 @@
 #'                             uls = c(10, 1),
 #'                             model = model.wrapper,
 #'                             maxiter = 10,
+#'                             reps = 5,
 #'                             alpha = 0.5,
 #'                             rel.dist.tol = 0.1)
 #' @import boot
@@ -31,8 +33,10 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
                     uls = c(10, 1),
                     model = model.wrapper,
                     maxiter = 10,
+                    reps = 5,
                     alpha = 0.5,
                     rel.dist.tol = 0.1){
+  ptm <- proc.time() # Start the clock
   range.width <- uls - lls
   ll.mat <- matrix(rep(lls, n.experiments), nrow = n.experiments, byrow = TRUE)
   range.width.mat <- matrix(rep(range.width, n.experiments), nrow = n.experiments, byrow = TRUE)
@@ -59,8 +63,8 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
     model.path <- "/Users/delvaw/Google Drive/IBM course/tutorials/AgeMixing/Calibration/dummy.0.1.nlogo"
     NLLoadModel(model.path, nl.obj="agemix.nl1")
     source(file = "/Users/delvaw/Google Drive/IBM course/tutorials/AgeMixing/Calibration/agemix.simulate.R")
-    sim.results.simple <- apply(experiments, 1, agemix.simulate) # Maybe this apply() can be replaced by a faster foreach loop?
-    if (ncol(sim.results.simple) >= 2) {sim.results.simple <- t(sim.results.simple)}
+    sim.results.simple <- t(apply(experiments, 1, agemix.simulate, no.repeated.sim=reps)) # Maybe this apply() can be replaced by a faster foreach loop?
+    # if (ncol(sim.results.simple) >= 2) {sim.results.simple <- t(sim.results.simple)}
     # numCores <- detectCores()
     # sobol.experiments.list <- split(c[1:10, ], seq(nrow(sobol.experiments[1:10, ]))) # Turning the dataframe into a list
     # sim.results.paral <- mclapply(sobol.experiments.list, agemix.simulate, mc.cores = numCores)
@@ -108,8 +112,11 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
                           abs(df$mean.age.hivpos - targets[2]) / targets[2] <= rel.tol,
                           abs(df$var.age.hivpos - targets[3]) / targets[3] <= rel.tol)
 
-    df.give.to.mice <- df.filtered
-    if (as.numeric(last.one.selected) > nrow(df.filtered)){df.give.to.mice <- df.selected}
+    df.choices <-list(df.selected, df.filtered)
+    df.choice.index <- ifelse(nrow(df.selected) > nrow(df.filtered),
+                              1,
+                              2)
+    df.give.to.mice <- df.choices[[df.choice.index]]
 
     interactions.df <- data.frame(x1x2 = df.give.to.mice$cumsum.transmissions * df.give.to.mice$mean.age.hivpos,
                                   x1x3 = df.give.to.mice$cumsum.transmissions * df.give.to.mice$var.age.hivpos,
@@ -134,37 +141,7 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
     experiments <- cbind(unlist(mice.test$imp$age.gap.tol.intercept),
                          unlist(mice.test$imp$age.gap.tol.coef))
     iteration <- iteration + 1
-
   }
-
-  proc.time() - ptm
-
-  df <- do.call(rbind, guesses$inputoutput[1:4])
-
-  rel.tol <- 0.002 # 0.25
-
-  # We also calculate sum of squared relative distances
-  df$cumsum.transmissions.sq.rel.dist <- ((df$cumsum.transmissions - targets[1]) / targets[1])^2
-  df$mean.age.hivpos.sq.rel.dist <- ((df$mean.age.hivpos - targets[2]) / targets[2])^2
-  df$var.age.hivpos.sq.rel.dist <- ((df$var.age.hivpos - targets[3]) / targets[3])^2
-  df$sum.sq.rel.dist <- df$cumsum.transmissions.sq.rel.dist + df$mean.age.hivpos.sq.rel.dist +df$var.age.hivpos.sq.rel.dist
-  dist.order <- order(df$sum.sq.rel.dist) # Ordering the squared distances from small to big. The last observation (targets) should be ranked first
-  shortest.dist.percentile <- 0.1344086 #50/372 # 0.25
-  last.one.selected <- round(shortest.dist.percentile * length(dist.order))
-  selected.distances <- dist.order[1:last.one.selected]
-  df.selected <- df[selected.distances, ]
-  df.filtered <- filter(df,
-                        abs(df$cumsum.transmissions - targets[1]) / targets[1] <= rel.tol,
-                        abs(df$mean.age.hivpos - targets[2]) / targets[2] <= rel.tol,
-                        abs(df$var.age.hivpos - targets[3]) / targets[3] <= rel.tol)
-
-  df.give.to.mice <- df.filtered
-  if (as.numeric(last.one.selected) > nrow(df.filtered)){df.give.to.mice <- df.selected}
-
-  summary(df.give.to.mice)
-  pairs(df.give.to.mice[,6:7])
-
-
+  calibration.list$secondspassed <- proc.time() - ptm # Stop the clock
+  return(calibration.list)
 }
-
-
