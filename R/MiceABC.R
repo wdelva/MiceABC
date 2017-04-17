@@ -7,6 +7,7 @@
 #' @param lls Lower limits of the parameter ranges to be explored
 #' @param uls Upper limits of the parameter ranges to be explored
 #' @param model Handle to the wrapper function that runs the simulation model
+#' @param maxit The number of iterations through the chained equations to settle on imputed values
 #' @param maxiter Maximum number of iterations (waves of simulations) before the algorithm is forced to stop
 #' @param reps Number of times each parameter set is repeated
 #' @param alpha Minimum fraction of n.experiments that gets used as input data for MICE
@@ -19,6 +20,7 @@
 #'                             lls = c(0, 0),
 #'                             uls = c(10, 1),
 #'                             model = model.wrapper,
+#'                             maxit = 20,
 #'                             maxiter = 10,
 #'                             reps = 5,
 #'                             alpha = 0.5,
@@ -32,6 +34,7 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
                     lls = c(0, 0),
                     uls = c(10, 1),
                     model = model.wrapper,
+                    maxit = 20,
                     maxiter = 10,
                     reps = 5,
                     alpha = 0.5,
@@ -46,6 +49,7 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
   calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
 
   iteration <- 1 # initiating the loop of waves of simulations (one iteration is one wave)
+  rel.dist.cutoff <- Inf # initially it is 1, but then it infinitely large, but in later iterations it shrinks
 
   while (iteration <= maxiter){
     print(c("iteration", iteration), quote = FALSE) # only for local testing. To be deleted after testing is completed
@@ -85,8 +89,13 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
     calibration.list$intercept[[iteration]] <- summary(experiments[ , 1])
     calibration.list$coef[[iteration]] <- summary(experiments[, 2])
 
+    all.sim.results.with.design.df <- do.call(rbind, calibration.list$inputoutput) # sim.results.with.design.df # do.call(rbind, calibration.list$inputoutput)
+
+
+
+
     # Now we combine this new set of simulation inputs and outputs with the target statistics
-    df <- dplyr::select(full_join(sim.results.with.design.df, data.frame(cumsum.transmissions = targets[1],
+    df <- dplyr::select(full_join(all.sim.results.with.design.df, data.frame(cumsum.transmissions = targets[1],
                                                                          mean.age.hivpos = targets[2],
                                                                          var.age.hivpos = targets[3])),
                         age.gap.tol.intercept,
@@ -102,11 +111,25 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
     df$mean.age.hivpos.sq.rel.dist <- ((df$mean.age.hivpos - targets[2]) / targets[2])^2
     df$var.age.hivpos.sq.rel.dist <- ((df$var.age.hivpos - targets[3]) / targets[3])^2
     df$sum.sq.rel.dist <- df$cumsum.transmissions.sq.rel.dist + df$mean.age.hivpos.sq.rel.dist +df$var.age.hivpos.sq.rel.dist
+
+    df <- dplyr::filter(df,
+                        sum.sq.rel.dist <= rel.dist.cutoff) # We force the new batch to be at least as good as the previous one
+
     dist.order <- order(df$sum.sq.rel.dist) # Ordering the squared distances from small to big. The last observation (targets) should be ranked first
     shortest.dist.percentile <- alpha # 0.25
     last.one.selected <- round(shortest.dist.percentile * length(dist.order))
     selected.distances <- dist.order[1:last.one.selected]
     df.selected <- df[selected.distances, ]
+
+    rel.dist.cutoff <- df$sum.sq.rel.dist[dist.order[last.one.selected]]
+    print(c("relative distance cut-off (sum of squared relative distances)", rel.dist.cutoff), quote = FALSE)
+
+    calibration.list$rel.dist.cutoff[[iteration]] <- rel.dist.cutoff
+
+    df.selected <- dplyr::filter(df,
+                        sum.sq.rel.dist <= rel.dist.cutoff)
+
+
     df.filtered <- filter(df,
                           abs(df$cumsum.transmissions - targets[1]) / targets[1] <= rel.tol,
                           abs(df$mean.age.hivpos - targets[2]) / targets[2] <= rel.tol,
@@ -129,12 +152,13 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
                                            mean.age.hivpos,
                                            var.age.hivpos),
                              interactions.df)
+    print(c(nrow(df.give.to.mice), "nrows to give to mice"), quote = FALSE)
 
     mice.test <- mice(data = df.give.to.mice, # the dataframe with missing data
                       m = n.experiments, # number of imputations
                       method = "norm",
                       defaultMethod = "norm",
-                      maxit = 20,
+                      maxit = maxit,
                       printFlag = FALSE,
                       data.init = NULL)
 
