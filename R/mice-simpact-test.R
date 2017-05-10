@@ -1,19 +1,20 @@
-install.packages("readcsvcolumns", repos="http://193.190.10.42/jori/")
-install.packages("tidyverse")
-install.packages("data.table")
-install.packages(c("exactci",
-                   "fBasics",
-                   "VarianceGamma",
-                   "fitdistrplus",
-                   "EnvStats",
-                   "gtools",
-                   "lhs",
-                   "GGally",
-                   "lmtest",
-                   "mice",
-                   "miceadds",
-                   "randtoolbox",
-                   "EasyABC"))
+# Install packages if not already done so
+# install.packages("readcsvcolumns", repos="http://193.190.10.42/jori/")
+# install.packages("tidyverse")
+# install.packages("data.table")
+# install.packages(c("exactci",
+#                    "fBasics",
+#                    "VarianceGamma",
+#                    "fitdistrplus",
+#                    "EnvStats",
+#                    "gtools",
+#                    "lhs",
+#                    "GGally",
+#                    "lmtest",
+#                    "mice",
+#                    "miceadds",
+#                    "randtoolbox",
+#                    "EasyABC"))
 
 library(RSimpactCyan)
 library(RSimpactHelper)
