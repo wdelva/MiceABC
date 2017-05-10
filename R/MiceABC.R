@@ -8,7 +8,7 @@
 #' @param uls Upper limits of the parameter ranges to be explored
 #' @param model Handle to the wrapper function that runs the simulation model
 #' @param maxit The number of iterations through the chained equations to settle on imputed values
-#' @param maxiter Maximum number of iterations (waves of simulations) before the algorithm is forced to stop
+#' @param maxwaves Maximum number of iterations (waves of simulations) before the algorithm is forced to stop
 #' @param reps Number of times each parameter set is repeated
 #' @param alpha Minimum fraction of n.experiments that gets used as input data for MICE
 #' @param rel.dist.tol Maximum tolerated relative distance from target statistics (may be overwritten by alpha)
@@ -21,7 +21,7 @@
 #'                             uls = c(10, 1),
 #'                             model = model.wrapper,
 #'                             maxit = 20,
-#'                             maxiter = 10,
+#'                             maxwaves = 10,
 #'                             reps = 5,
 #'                             alpha = 0.5,
 #'                             rel.dist.tol = 0.1)
@@ -35,7 +35,7 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
                     uls = c(10, 1),
                     model = model.wrapper,
                     maxit = 20,
-                    maxiter = 10,
+                    maxwaves = 10,
                     reps = 5,
                     alpha = 0.5,
                     rel.dist.tol = 0.1){
@@ -49,11 +49,11 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
 
   calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
 
-  iteration <- 1 # initiating the loop of waves of simulations (one iteration is one wave)
+  wave <- 1 # initiating the loop of waves of simulations (one iteration is one wave)
   rel.dist.cutoff <- Inf # initially it is 1, but then it infinitely large, but in later iterations it shrinks
 
-  while (iteration <= maxiter){
-    print(c("iteration", iteration), quote = FALSE) # only for local testing. To be deleted after testing is completed
+  while (wave <= maxwaves){
+    print(c("wave", wave), quote = FALSE) # only for local testing. To be deleted after testing is completed
     large.enough <- t(t(experiments) >= lls)
     small.enough <- t(t(experiments) <= uls)
     fine <- large.enough & small.enough
@@ -165,7 +165,7 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
 
     experiments <- cbind(unlist(mice.test$imp$age.gap.tol.intercept),
                          unlist(mice.test$imp$age.gap.tol.coef))
-    iteration <- iteration + 1
+    wave <- wave + 1
   }
   calibration.list$secondspassed <- proc.time() - ptm # Stop the clock
   return(calibration.list)
