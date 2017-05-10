@@ -40,6 +40,7 @@ MiceABC <- function(targets = c(logit(0.15), log(0.015)),
                     alpha = 0.5,
                     rel.dist.tol = 0.1){
   ptm <- proc.time() # Start the clock
+
   range.width <- uls - lls
   ll.mat <- matrix(rep(lls, n.experiments), nrow = n.experiments, byrow = TRUE)
   range.width.mat <- matrix(rep(range.width, n.experiments), nrow = n.experiments, byrow = TRUE)
