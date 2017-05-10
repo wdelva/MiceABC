@@ -28,10 +28,10 @@ setwd("/Users/delvaw/Documents/MiceABC/R")
 master.data <- agemix.simulate(param.set = c(8, 0.2), no.repeated.sim=25)
 
 targets <- c(48.41, 27.91908, 54.22174)
-n.experiments <- 60
+n.experiments <- 10#60
 maxit <- 20
-maxiter <- 6
-reps <- 5
+maxiter <- 2#6
+reps <- 2#5
 alpha <- 0.7
 rel.dist.tol <- 0.000001
 rel.dist.tol.final <- 0.005
@@ -81,5 +81,5 @@ var(all.data.final[,6:7])
 
 dim(all.data.final[,6:7])
 
-save.image(file = "/Users/delvaw/Google Drive/IBM course/tutorials/AgeMixing/Calibration/Sunday.evening.RData")
+save.image(file = "/Users/delvaw/Google Drive/IBM course/tutorials/AgeMixing/Calibration/10May.RData")
 
