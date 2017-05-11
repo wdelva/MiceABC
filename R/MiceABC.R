@@ -59,11 +59,11 @@ MiceABC <- function(targets = c(4.3, 4.7),
     print(c("wave", wave), quote = FALSE) # only for local testing. To be deleted after testing is completed
     # These large and small enough tests could be commented out because the "true" parameter value may lie outside the initial parameter range.
     # They may be useful to prevent infeasible MICE-derived proposals from running (e.g. positive parameters values that don't make sense)
-    # large.enough <- t(t(experiments) >= lls)
-    # small.enough <- t(t(experiments) <= uls)
-    # fine <- large.enough & small.enough
-    # fine.flag <- as.logical(rowSums(fine) == ncol(fine))
-    # experiments <- experiments[fine.flag, ]
+    large.enough <- t(t(experiments) >= lls)
+    small.enough <- t(t(experiments) <= uls)
+    fine <- large.enough & small.enough
+    fine.flag <- as.logical(rowSums(fine) == ncol(fine))
+    experiments <- experiments[fine.flag, ]
     try(if(nrow(experiments) == 0) stop("no experiments in the range"))
     print(c(nrow(experiments), "experiments to be run"), quote = FALSE) # only for local testing. To be deleted after testing is completed
 
