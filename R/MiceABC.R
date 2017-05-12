@@ -67,6 +67,8 @@ MiceABC <- function(targets = c(4.3, 4.7),
     try(if(nrow(experiments) == 0) stop("no experiments in the range"))
     print(c(nrow(experiments), "experiments to be run"), quote = FALSE) # only for local testing. To be deleted after testing is completed
 
+    calibration.list$experiments.executed[[wave]] <- nrow(experiments)
+
     # Running the experiments
     # nl.path <- "/Applications/NetLogo 6.0/app/"
     # NLStart(nl.path, gui=FALSE, nl.obj="agemix.nl1", nl.jarname = 'netlogo-6.0.0.jar')
