@@ -98,6 +98,9 @@ MiceABC <- function(targets = c(4.3, 4.7),
     sim.results.with.design.df$y.2.sq.rel.dist <- ((sim.results.with.design.df$y.2 - targets[2]) / targets[2])^2
     sim.results.with.design.df$sum.sq.rel.dist <- sim.results.with.design.df$y.1.sq.rel.dis + sim.results.with.design.df$y.2.sq.rel.dis
 
+    # 2b. Writing to list all the input and output of the executed experiments, so that we can plot it later
+    calibration.list$sim.results.with.design[[wave]] <- sim.results.with.design.df
+
     # 10. Calculate fraction of new (1-alpha frac *n.experiments) distances that are below "old" distance threshold
     below.old.treshold <- sim.results.with.design.df$sum.sq.rel.dist < rel.dist.cutoff
     frac.below.old.threshold <- sum(below.old.treshold) / round(n.experiments * (1-alpha))
