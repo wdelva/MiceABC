@@ -28,8 +28,8 @@ setwd("/Users/delvaw/Documents/MiceABC/R")
 master.data <- agemix.simulate(param.set = c(8, 0.2), no.repeated.sim=25)
 
 targets <- c(48.41, 27.91908, 54.22174)
-n.experiments <- 10#60
-maxit <- 20
+n.experiments <- 30#60
+maxit <- 10
 maxiter <- 2#6
 reps <- 2#5
 alpha <- 0.7
