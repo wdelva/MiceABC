@@ -29,7 +29,7 @@
 #' @import randtoolbox
 #' @import dplyr
 
-MiceABC <- function(targets = c(4.3, 4.7),
+MiceABC <- function(targets = c(3.75, 4.48),
                     n.experiments = 16,
                     lls = c(-6.5, -6.5),
                     uls = c(-5.5, -5.5),
@@ -151,6 +151,138 @@ MiceABC <- function(targets = c(4.3, 4.7),
 
 
 
+
+
+
+MiceABC.V8 <- function(targets = c(5.816, 3.924, 0.05916, 0.6628, 5.229, 1.4985, 0.12573, 0.003311),
+                       n.experiments = 16,
+                       lls = c(0.1, -3),
+                       uls = c(5, -0.1),
+                       model = simpact.wrapper,
+                       maxit = 20,
+                       maxwaves = 2,#0,
+                       #reps = 5,
+                       alpha = 0.25,
+                       saturation.crit = 0){
+  ptm <- proc.time() # Start the clock
+
+  range.width <- uls - lls
+  ll.mat <- matrix(rep(lls, n.experiments), nrow = n.experiments, byrow = TRUE)
+  range.width.mat <- matrix(rep(range.width, n.experiments), nrow = n.experiments, byrow = TRUE)
+  sobol.seq.0.1 <- sobol(n = n.experiments, dim = length(lls), init = TRUE, scrambling = 1, seed = 1, normal = FALSE)
+  experiments <- ll.mat + sobol.seq.0.1 * range.width.mat
+
+  calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
+
+  wave <- 1 # initiating the loop of waves of simulations (one iteration is one wave)
+  rel.dist.cutoff <- Inf # initially it is infinitely large, but in later iterations it shrinks
+  saturation <- 0
+  sim.results.with.design.df.selected <- NULL
+
+
+  while (wave <= maxwaves && saturation == 0){
+    print(c("wave", wave), quote = FALSE) # only for local testing. To be deleted after testing is completed
+    # These large and small enough tests could be commented out because the "true" parameter value may lie outside the initial parameter range.
+    # They may be useful to prevent infeasible MICE-derived proposals from running (e.g. positive parameters values that don't make sense)
+    large.enough <- t(t(experiments) >= lls)
+    small.enough <- t(t(experiments) <= uls)
+    fine <- large.enough & small.enough
+    fine.flag <- as.logical(rowSums(fine) == ncol(fine))
+    experiments <- experiments[fine.flag, ]
+    try(if(nrow(experiments) == 0) stop("no experiments in the range"))
+    print(c(nrow(experiments), "experiments to be run"), quote = FALSE) # only for local testing. To be deleted after testing is completed
+
+    calibration.list$experiments.executed[[wave]] <- nrow(experiments)
+
+    # Running the experiments
+    # nl.path <- "/Applications/NetLogo 6.0/app/"
+    # NLStart(nl.path, gui=FALSE, nl.obj="agemix.nl1", nl.jarname = 'netlogo-6.0.0.jar')
+    # model.path <- "/Users/delvaw/Google Drive/IBM course/tutorials/AgeMixing/Calibration/dummy.0.1.nlogo"
+    # NLLoadModel(model.path, nl.obj="agemix.nl1")
+    # source(file = "/Users/delvaw/Google Drive/IBM course/tutorials/AgeMixing/Calibration/agemix.simulate.R")
+
+    # sim.results.simple <- t(apply(experiments, 1, model, no.repeated.sim=reps)) # Maybe this apply() can be replaced by a faster foreach loop?
+    # Replacing NetLogo model with parallel Simpact model
+
+    # 1. Initially: n.experiments from sobol sequences. 7. Later, (1-alpha) fraction of n.experiments from MICE proposals
+    sim.results.simple <- simpact.parallel(model = model,
+                                           actual.input.matrix = experiments,
+                                           seed_count = 0,
+                                           n_cluster = 8)
+
+    #experiment.number <- 1:nrow(experiments)
+    sim.results.with.design.df <- as.data.frame(cbind(#experiment.number,
+      experiments,
+      sim.results.simple))
+    x.names <- paste0("x.", seq(1:ncol(experiments)))
+    y.names <- paste0("y.", seq(1:ncol(sim.results.simple)))
+    names(sim.results.with.design.df) <- c(x.names, y.names)
+
+    # 2. All n.experiments from sobol sequences get summarised measure of distance from target. 8. Distance measures for new proposals
+    # NEEDS TO BE AUTOMATED
+    sim.results.with.design.df$y.1.sq.rel.dist <- ((sim.results.with.design.df$y.1 - targets[1]) / targets[1])^2
+    sim.results.with.design.df$y.2.sq.rel.dist <- ((sim.results.with.design.df$y.2 - targets[2]) / targets[2])^2
+    sim.results.with.design.df$y.3.sq.rel.dist <- ((sim.results.with.design.df$y.3 - targets[3]) / targets[3])^2
+    sim.results.with.design.df$y.4.sq.rel.dist <- ((sim.results.with.design.df$y.4 - targets[4]) / targets[4])^2
+    sim.results.with.design.df$y.5.sq.rel.dist <- ((sim.results.with.design.df$y.5 - targets[5]) / targets[5])^2
+    sim.results.with.design.df$y.6.sq.rel.dist <- ((sim.results.with.design.df$y.6 - targets[6]) / targets[6])^2
+    sim.results.with.design.df$y.7.sq.rel.dist <- ((sim.results.with.design.df$y.7 - targets[7]) / targets[7])^2
+    sim.results.with.design.df$y.8.sq.rel.dist <- ((sim.results.with.design.df$y.8 - targets[8]) / targets[8])^2
+
+    sim.results.with.design.df$sum.sq.rel.dist <- sim.results.with.design.df$y.1.sq.rel.dist + sim.results.with.design.df$y.2.sq.rel.dist + sim.results.with.design.df$y.3.sq.rel.dist + sim.results.with.design.df$y.4.sq.rel.dist + sim.results.with.design.df$y.5.sq.rel.dist + sim.results.with.design.df$y.6.sq.rel.dist + sim.results.with.design.df$y.7.sq.rel.dist + sim.results.with.design.df$y.8.sq.rel.dist
+    browser()
+
+    # 2b. Writing to list all the input and output of the executed experiments, so that we can plot it later
+    calibration.list$sim.results.with.design[[wave]] <- sim.results.with.design.df
+
+    # 10. Calculate fraction of new (1-alpha frac *n.experiments) distances that are below "old" distance threshold
+    below.old.treshold <- sim.results.with.design.df$sum.sq.rel.dist < rel.dist.cutoff
+    frac.below.old.threshold <- sum(below.old.treshold %in% TRUE) / round(n.experiments * (1-alpha))
+    if(frac.below.old.threshold < saturation.crit) saturation <- 1 # If less than the fraction saturation.crit of the new experiments a closer fit than the previous batch of retained experiments, the loop must be terminated.
+
+
+    # 9. Merge with previously kept alpha fraction shortest distances
+    sim.results.with.design.df <- rbind(sim.results.with.design.df.selected, sim.results.with.design.df) # Initially sim.results.with.design.df.selected = NULL
+
+    # 3. Keeping alpha fraction shortest distances
+    dist.order <- order(sim.results.with.design.df$sum.sq.rel.dist) # Ordering the squared distances from small to big. The last observation (targets) should be ranked first
+    last.one.selected <- round(alpha * n.experiments) # OR IT COULD ALSO BE WRITTEN AS round(alpha * length(dist.order)) BUT IF RANGE CHECKS ARE ON, THE nrow IS NOT NECESSARILY = n.experiments
+    selected.distances <- dist.order[1:last.one.selected]
+    sim.results.with.design.df.selected <- sim.results.with.design.df[selected.distances, ] %>% filter(complete.cases(.)) # Here we filter out any experiments that gave NA output
+
+    # 4. Set distance threshold at alpha-percentile best distance. 11. Update distance threshold
+    rel.dist.cutoff <- max(sim.results.with.design.df.selected$sum.sq.rel.dist)  # We update the rel.dist.cutoff, based on the alpha fraction best parametersets
+
+    # 5. Write alpha fraction of input-output-distances and distance threshold to list. 12. Write new best alpha fraction and updated threshold to list
+    calibration.list$inputoutput[[wave]] <- sim.results.with.design.df.selected
+    calibration.list$rel.dist.cutoff[[wave]] <- rel.dist.cutoff
+
+    # 6. Feed MICE the best alpha fraction and ask for (1-alpha) fraction proposals based on targets
+    targets.df <- as.data.frame(matrix(targets, ncol = length(targets))) # Putting target in dataframe format
+    names(targets.df) <- y.names
+    df.give.to.mice <- full_join(dplyr::select(sim.results.with.design.df.selected,
+                                               -contains("sq.rel.dist")), # adding target to training dataset
+                                 targets.df)
+    # Because there are some many interaction terms, let's first try without any
+    #df.give.to.mice <- cbind(df.give.to.mice, data.frame(y.1.y.2 = df.give.to.mice$y.1 * df.give.to.mice$y.2)) # adding interaction term
+    print(c(nrow(df.give.to.mice), "nrows to give to mice"), quote = FALSE)
+    mice.test <- mice(data = df.give.to.mice, # the dataframe with missing data
+                      m = round(n.experiments * (1-alpha)), # number of imputations
+                      method = "norm",
+                      defaultMethod = "norm",
+                      maxit = maxit,
+                      printFlag = FALSE,
+                      data.init = NULL)
+
+    experiments <- cbind(unlist(mice.test$imp$x.1), # these are the (1-alpha) fraction of n.experiments proposals
+                         unlist(mice.test$imp$x.2))
+
+    wave <- wave + 1
+  }
+
+  calibration.list$secondspassed <- proc.time() - ptm # Stop the clock
+  return(calibration.list)
+}
 
 
 
