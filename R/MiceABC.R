@@ -259,10 +259,12 @@ MiceABC.V8 <- function(targets = c(5.816, 3.924, 0.05916, 0.6628, 5.229, 1.4985,
 
     # 6. Feed MICE the best alpha fraction and ask for (1-alpha) fraction proposals based on targets
     targets.df <- as.data.frame(matrix(targets, ncol = length(targets))) # Putting target in dataframe format
+
     names(targets.df) <- y.names
     df.give.to.mice <- full_join(dplyr::select(sim.results.with.design.df.selected,
                                                -contains("sq.rel.dist")), # adding target to training dataset
                                  targets.df)
+
     # Because there are some many interaction terms, let's first try without any
     #df.give.to.mice <- cbind(df.give.to.mice, data.frame(y.1.y.2 = df.give.to.mice$y.1 * df.give.to.mice$y.2)) # adding interaction term
     print(c(nrow(df.give.to.mice), "nrows to give to mice"), quote = FALSE)
