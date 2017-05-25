@@ -21,6 +21,7 @@ library(RSimpactHelper)
 library(EasyABC)
 library(dplyr)
 library(nlme)
+library(boot)
 
 
 # Let's create a colour palette that is colourblind-friendly
@@ -95,7 +96,7 @@ simpact.wrapper.master <- function(inputvector = input.vector){
   return(cd4count.atARTInit)
 }
 
-  destDir <- "/Users/wimdelva/Downloads"
+  destDir <- "/Users/delvaw/Downloads"
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
                                    population.simtime = 40,
@@ -359,7 +360,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   return(cd4count.atARTInit)
 }
 
-  destDir <- "/Users/wimdelva/Downloads"
+  destDir <- "/Users/delvaw/Downloads"
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
                                    population.simtime = 40,
@@ -612,7 +613,7 @@ sumsmstats.interv.df <- simpact.parallel(model = simpact.wrapper.master,
 
 
 ```{r loadmastermodeloutput}
-load(file = "/Users/wimdelva/Documents/MiceABC/incidence.rel.reduc.RData")
+load(file = "/Users/delvaw/Documents/MiceABC/incidence.rel.reduc.RData")
 ```
 
 
@@ -664,23 +665,73 @@ mice.impute.myprob <- function (y, ry, x, ...)
 ```
 
 
-```{r MICE_ABC}
+```{r MICE_ABC, cache = TRUE}
 ptm <- proc.time()
 # First 2 parameters can be viewed as continuous variables
 # 3rd and 7th must be viewed as constrained between 0 and 1
 MICE_ABC_testoutput <- MICE_ABC(targets = target.vector.trainer,
-                                 n.experiments = 64,
+                                 n.experiments = 128,
                                  lls = c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
                                  uls = c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
                                  model = simpact.wrapper,
                                  maxit = 20,
-                                 maxwaves = 2, # and we can also try 10 to do the same as the 10 waves of Lenormand
+                                 maxwaves = 5, # and we can also try 10 to do the same as the 10 waves of Lenormand
                                  #reps = 5,
-                                 alpha = 0.5,
+                                 alpha = 0.25,
                                  saturation.crit = 0)
 mice.timeused <- proc.time() - ptm
 mice.timeused # xxxx seconds
+```
+
+```{r save.calibration.results}
+save(MICE_ABC_testoutput, file = "/Users/delvaw/Documents/MiceABC/mice.tasp.RData")
+
+```
+Now let's explore and visualise the results
+```{r vis.calib.results}
+names(MICE_ABC_testoutput)
+
+
+# 3. For miceabc
+# First for the 5 waves
+xplusyvars.length <- length(xvars.names) + length(yvars.names)
+miceabc_inout_all <- do.call(rbind, miceabc.output.8V$sim.results.with.design)[,1:xplusyvars.length]
+best16.mice <- miceabc_inout_all$y.1 %in% miceabc.output.8V$inputoutput[[5]]$y.1
+abcmice.df <- as.data.frame(cbind(miceabc_inout_all,
+                                  best16.mice))
+abcmice.df$method <- "mice"
+names(abcmice.df) <- c(xvars.names, yvars.names,"best16", "method")
+
+# Then for the 10 waves
+xplusyvars.length <- length(xvars.names) + length(yvars.names)
+miceabc_inout_all <- do.call(rbind, miceabc.output2.8V.10waves$sim.results.with.design)[,1:xplusyvars.length]
+best16.mice <- miceabc_inout_all$y.1 %in% miceabc.output2.8V.10waves$inputoutput[[10]]$y.1
+abcmice.df <- as.data.frame(cbind(miceabc_inout_all,
+                                  best16.mice))
+abcmice.df$method <- "mice"
+names(abcmice.df) <- c(xvars.names, yvars.names,"best16", "method")
+
+
+# Adding the target statistics and their inputs
+target.df <- data.frame(matrix(c(3, -0.5, 5.816, 3.924, 0.05916, 0.6628, 5.229, 1.4985, 0.12573, 0.003311), nrow = 1), # The inputs and targets
+                        best16 = TRUE, method = "target")
+names(target.df) <- c(xvars.names, yvars.names, "best16", "method")
+
+
+# Now we can rbind these 4 datasets into one dataset that we can plot with ggplot2
+abc.comparison.V8.df <- rbind(abcreject.df,
+                           abcLenorm.df,
+                           abcmice.df,
+                           target.df)
+abc.comparison.V8.df$method <- factor(abc.comparison.V8.df$method, labels = c("Lenormand",
+                                                                        "MICE",
+                                                                        "Rejection",
+                                                                        "Target"))
+
+abc.comparison.V8.df$method <- factor(abc.comparison.V8.df$method,levels(abc.comparison.V8.df$method)[c(3, 1, 2, 4)]) # We want the levels in a particular order, for plotting and colour purposes
+levels(abc.comparison.V8.df$method)
 
 
 ```
+
 
