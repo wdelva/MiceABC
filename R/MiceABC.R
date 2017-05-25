@@ -6,6 +6,7 @@
 #' @param n.experiments The number of initial multivariate samples from the parameter space
 #' @param lls Lower limits of the parameter ranges to be explored
 #' @param uls Upper limits of the parameter ranges to be explored
+#' @param probs Indicate in the lls and uls vectors, which elements represent probabilities strictly between 0 and 1
 #' @param model Handle to the wrapper function that runs the simulation model
 #' @param maxit The number of iterations through the chained equations to settle on imputed values
 #' @param maxwaves Maximum number of iterations (waves of simulations) before the algorithm is forced to stop
@@ -18,6 +19,7 @@
 #'                             n.experiments = 100,
 #'                             lls = c(0, 0),
 #'                             uls = c(10, 1),
+#'                             probs = c(3, 7),
 #'                             model = model.wrapper,
 #'                             maxit = 20,
 #'                             maxwaves = 10,
@@ -32,6 +34,7 @@ MICE_ABC <- function(targets = target.vector.trainer,
                      n.experiments = 16,
                      lls = c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
                      uls = c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
+                     probs = c(3, 7), # indicate in the lls and uls vectors, which elements represent probabilities strictly between 0 and 1
                      model = simpact.wrapper,
                      maxit = 10,
                      maxwaves = 2, # and we can also try 10 to do the same as the 10 waves of Lenormand
@@ -159,21 +162,52 @@ MICE_ABC <- function(targets = target.vector.trainer,
                                                -contains("sq.rel.dist")), # adding target to training dataset
                                  targets.df)
 
+    ### Before actually giving it to MICE, we need to logit transform the input params that represent probabilities, so that we can treat these variables as continuous variables
+    # "probs" shows that it is the 3rd and 7th input variable (not counting the random seed variable)
+    df.give.to.mice[, probs] <- car::logit(df.give.to.mice[, probs])
+
+    # Let's think a bit more carefully about which variables should be allowed as input for which input parameters.
+    # IN THE FUTURE THIS COULD BE AUTOMATED WITH VARIABLE SELECTION ALGORITHMS.
+    predictorMatrix <- (1 - diag(1, ncol(df.give.to.mice))) # This is the default matrix.
+    # Let's now modify the first 7 rows of this matrix, corresponding to the indicators of predictor variables for the input variables. In brackets the values for the master model.
+    # 1. person.agegap.woman.dist.normal.sigma (3)
+    # 2. formation.hazard.agegapry.gap_factor_man_exp (-0.5)
+    # 3. person.art.accept.threshold.dist.fixed.value (0.25)
+    # 4. time since start of the ART roll-out (at t=25) when CD4 threshold shifted from 100 to 200 (5)
+    # 5. time since 200 threshold when CD4 threshold shifted to 350 (3)
+    # 6. time since 350 threshold when CD4 threshold shifted to 500 (3)
+    # 7. person.art.accept.threshold.dist.fixed.value (updated value) (at t=38) when CD4 threshold was abandoned entirely
+
+    # And a reminder of the output vector
+    # outputvector <- c(AAD, SDAD, powerm, slopem, WVAD.base, BVAD, hivprev.15.50, growthrate,
+    #                   exp(ART.cov.vector),
+    #                   exp(cd4.lt100.vector/cd4.any.vector),    32:34
+    #                   exp(cd4.100.200.vector/cd4.any.vector),  35:37
+    #                   exp(cd4.200.350.vector/cd4.any.vector),  38:40
+    #                   exp(cd4.350.500.vector/cd4.any.vector),  41:43
+    #                   exp(cd4.500plus.vector/cd4.any.vector))  44:46
+
+
+    predictorMatrix[1:7, ] <- 0 # First we "empty" the relevant rows, then we refill them
+    predictorMatrix[1, c(9, 13)] <- 1
+    predictorMatrix[2, c(8, 9, 12, 14, 15)] <- 1
+    predictorMatrix[3, 17:26] <- 1 # The first 10 years after the introduction of ART
+    predictorMatrix[4, c(17:26, 32:37)] <- 1 # We know the shift took place in the 10 years after ART introduction
+    predictorMatrix[5, c(22:31, 35:40)] <- 1
+    predictorMatrix[6, c(24:34, 38:43)] <- 1
+    predictorMatrix[7, c(30, 31, 46)] <- 1 # 30 and 31 are the ART coverage at time 39 and 40 years; 46 is fraction of ART initiations above 500 cd4 cells
+
+
+
     # Because there are some many interaction terms, let's first try without any
     #df.give.to.mice <- cbind(df.give.to.mice, data.frame(y.1.y.2 = df.give.to.mice$y.1 * df.give.to.mice$y.2)) # adding interaction term
     print(c(nrow(df.give.to.mice), "nrows to give to mice"), quote = FALSE)
 
     mice.test <- mice(data = df.give.to.mice, # the dataframe with missing data
                       m = round(n.experiments * (1-alpha)), # number of imputations
-                      method = c("norm",
-                                 "norm",
-                                 "myprob",
-                                 "norm",
-                                 "norm",
-                                 "norm",
-                                 "myprob",
-                                 rep("norm", length(y.names))), # norm for all output statistics, but this should not matter because none are missing, so these regression models should not be used.
-                      #defaultMethod = "norm",
+                      predictorMatrix = predictorMatrix,
+                      method = "norm",
+                      defaultMethod = "norm",
                       maxit = maxit,
                       printFlag = FALSE,
                       data.init = NULL)
@@ -184,7 +218,8 @@ MICE_ABC <- function(targets = target.vector.trainer,
     #                      unlist(mice.test$imp$x.2))
 
     experiments <- unlist(mice.test$imp) %>% matrix(., byrow = FALSE, ncol = length(x.names))
-
+    # Before we check the suitability of the new experimental input parameter values, we must backtransform the logits to probabilities
+    experiments[, probs] <- boot::inv.logit(experiments[, probs])
     wave <- wave + 1
   }
 
