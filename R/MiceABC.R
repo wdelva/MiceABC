@@ -28,15 +28,16 @@
 #' @import randtoolbox
 #' @import dplyr
 
-MICE_ABC <- function(targets = c(5.816, 3.924, 0.05916, 0.6628, 5.229, 1.4985, 0.12573, 0.003311, 0.01),
-                       n.experiments = 16,
-                       lls = c(0.1, -3),
-                       uls = c(5, -0.1),
-                       model = simpact.wrapper,
-                       maxit = 20,
-                       maxwaves = 2,#0,
-                       alpha = 0.25,
-                       saturation.crit = 0){
+MICE_ABC <- function(targets = target.vector.trainer,
+                     n.experiments = 16,
+                     lls = c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
+                     uls = c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
+                     model = simpact.wrapper,
+                     maxit = 10,
+                     maxwaves = 2, # and we can also try 10 to do the same as the 10 waves of Lenormand
+                     #reps = 5,
+                     alpha = 0.25,
+                     saturation.crit = 0){
   ptm <- proc.time() # Start the clock
 
   range.width <- uls - lls
@@ -161,7 +162,7 @@ MICE_ABC <- function(targets = c(5.816, 3.924, 0.05916, 0.6628, 5.229, 1.4985, 0
     # Because there are some many interaction terms, let's first try without any
     #df.give.to.mice <- cbind(df.give.to.mice, data.frame(y.1.y.2 = df.give.to.mice$y.1 * df.give.to.mice$y.2)) # adding interaction term
     print(c(nrow(df.give.to.mice), "nrows to give to mice"), quote = FALSE)
-    browser()
+
     mice.test <- mice(data = df.give.to.mice, # the dataframe with missing data
                       m = round(n.experiments * (1-alpha)), # number of imputations
                       method = c("norm",
@@ -183,9 +184,6 @@ MICE_ABC <- function(targets = c(5.816, 3.924, 0.05916, 0.6628, 5.229, 1.4985, 0
     #                      unlist(mice.test$imp$x.2))
 
     experiments <- unlist(mice.test$imp) %>% matrix(., byrow = FALSE, ncol = length(x.names))
-
-    browser()
-
 
     wave <- wave + 1
   }
