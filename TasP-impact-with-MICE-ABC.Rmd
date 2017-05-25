@@ -95,7 +95,7 @@ simpact.wrapper.master <- function(inputvector = input.vector){
   return(cd4count.atARTInit)
 }
 
-  destDir <- "/Users/delvaw/Downloads"
+  destDir <- "/Users/wimdelva/Downloads"
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
                                    population.simtime = 40,
@@ -359,7 +359,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   return(cd4count.atARTInit)
 }
 
-  destDir <- "/Users/delvaw/Downloads"
+  destDir <- "/Users/wimdelva/Downloads"
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
                                    population.simtime = 40,
@@ -610,19 +610,26 @@ sumsmstats.interv.df <- simpact.parallel(model = simpact.wrapper.master,
 
 ```
 
+
+```{r loadmastermodeloutput}
+load(file = "/Users/wimdelva/Documents/MiceABC/incidence.rel.reduc.RData")
+```
+
+
+
 Now let's subtract the incidence estimates from one another.
 ```{r impact.estimation}
 
 summary.interv <- summary(sumsmstats.interv.df)
-colMeans(sumsmstats.interv.df, na.rm = TRUE)
+#colMeans(sumsmstats.interv.df, na.rm = TRUE)
 
-lastcolumn <- ncol(sumsmstats.control.df)
-incidence.rel.reduc <- (sumsmstats.control.df[,lastcolumn] - sumsmstats.interv.df[,lastcolumn]) / sumsmstats.control.df[,lastcolumn]
-hist(incidence.rel.reduc, 20)
-summary(incidence.rel.reduc)
-predict.95.percent.interval.incidence.rel.reduc <- quantile(incidence.rel.reduc, probs = c(0.025, 0.975), na.rm = TRUE)
+#lastcolumn <- ncol(sumsmstats.control.df)
+#incidence.rel.reduc <- (sumsmstats.control.df[,lastcolumn] - sumsmstats.interv.df[,lastcolumn]) / sumsmstats.control.df[,lastcolumn]
+#hist(incidence.rel.reduc, 20)
+#summary(incidence.rel.reduc)
+#predict.95.percent.interval.incidence.rel.reduc <- quantile(incidence.rel.reduc, probs = c(0.025, 0.975), na.rm = TRUE)
 
-summary.interv.master <- summary(sumsmstats.interv.df)
+summary.interv.master <- summary.interv # summary(sumsmstats.interv.df)
 target.vector.master <- colMeans(sumsmstats.interv.df, na.rm =TRUE)
 target.vector.trainer <- head(target.vector.master, -1)
 target.vector.trainer[9:length(target.vector.trainer)] <- exp(target.vector.trainer[9:length(target.vector.trainer)])
@@ -630,18 +637,16 @@ target.vector.trainer[9:length(target.vector.trainer)] <- exp(target.vector.trai
 ```
 
 
-
 ```{r myprob}
 mice.impute.myprob <- function (y, ry, x, ...) 
 {
-    aug <- mice:::augment(y, ry, x, ...)
-    x <- aug$x
-    y <- aug$y
-    ry <- aug$ry
-    w <- aug$w
+    #aug <- mice:::augment(y, ry, x, ...)
+    #x <- aug$x
+    #y <- aug$y
+    #ry <- aug$ry
+    #w <- aug$w
     x <- cbind(1, as.matrix(x))
-    expr <- expression(glm.fit(x[ry, ], y[ry], family = binomial(link = logit), 
-        weights = w[ry]))
+    expr <- expression(glm.fit(x[ry, ], y[ry], family = binomial(link = logit)))# expression(glm.fit(x[ry, ], y[ry], family = binomial(link = logit), weights = w[ry]))
     fit <- suppressWarnings(eval(expr))
     fit.sum <- summary.glm(fit)
     beta <- coef(fit)
@@ -664,14 +669,14 @@ ptm <- proc.time()
 # First 2 parameters can be viewed as continuous variables
 # 3rd and 7th must be viewed as constrained between 0 and 1
 MICE_ABC_testoutput <- MICE_ABC(targets = target.vector.trainer,
-                                 n.experiments = 16,
+                                 n.experiments = 64,
                                  lls = c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
                                  uls = c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
                                  model = simpact.wrapper,
                                  maxit = 20,
                                  maxwaves = 2, # and we can also try 10 to do the same as the 10 waves of Lenormand
                                  #reps = 5,
-                                 alpha = 0.25,
+                                 alpha = 0.5,
                                  saturation.crit = 0)
 mice.timeused <- proc.time() - ptm
 mice.timeused # xxxx seconds
