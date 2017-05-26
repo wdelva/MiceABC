@@ -688,6 +688,70 @@ mice.timeused # xxxx seconds
 save(MICE_ABC_testoutput, file = "/Users/wimdelva/Documents/MiceABC/mice.tasp.RData")
 
 ```
+
+
+```{r rejection.abc}
+
+ptm <- proc.time()
+rejectabc.output <- ABC_rejection(model = simpact.wrapper,
+                                prior = list(c("unif", 2, 4),
+                                               c("unif", -1, -0.2),
+                                               c("unif", 0.1, 0.6),
+                                               c("unif", 2, 8),
+                                               c("unif", 1, 6),
+                                               c("unif", 1, 6),
+                                               c("unif", 0.3, 0.95)),
+                                  nb_simul = 420, # and we can also try 496 to do the same as the 10 waves of Lenormand
+                                  #summary_stat_target = c(3.75, 4.48),   # this and tol is commented out, so that we can see ALL the output, not just the retained fraction.
+                                  #tol = 0.064, # That is 16/250 to be in line with the output of miceabc
+                                  use_seed = TRUE,
+                                  seed_count = 0,
+                                  n_cluster = 8)
+rejection.timeused <- proc.time() - ptm
+rejection.timeused # 5856.559 seconds
+
+
+
+```
+Let's save the results of the rejection abc calibration
+
+```{r save.reject.abc}
+save(rejectabc.output, file = "/Users/delvaw/Documents/MiceABC/reject.tasp.RData")
+```
+
+Second comparison is the Lenormand algorithm
+```{r Lenormandabc}
+ptm <- proc.time()
+lenormandabc.output <- ABC_sequential(method = "Lenormand",
+                                      model = simpact.wrapper,
+                                      prior = list(c("unif", 2, 4),
+                                               c("unif", -1, -0.2),
+                                               c("unif", 0.1, 0.6),
+                                               c("unif", 2, 8),
+                                               c("unif", 1, 6),
+                                               c("unif", 1, 6),
+                                               c("unif", 0.3, 0.95)),
+                                      nb_simul = 128,
+                                      summary_stat_target = target.vector.trainer,
+                                      alpha = 0.1, # 0.25,
+                                      p_acc_min = 0.5, # 0.2, # 0.05,
+                                      use_seed = TRUE,
+                                      seed_count = 0,
+                                      n_cluster = 8,
+                                      verbose = TRUE)
+lenormand.timeused <- proc.time() - ptm
+lenormand.timeused #  seconds
+```
+
+Let's save the results of the Lenormand abc calibration
+
+```{r save.lenormand.abc}
+save(lenormandabc.output, file = "/Users/delvaw/Documents/MiceABC/lenormand.tasp.RData")
+```
+
+
+
+
 Now let's explore and visualise the results
 ```{r vis.calib.results}
 load(file = "/Users/wimdelva/Documents/MiceABC/reject.tasp.RData")
