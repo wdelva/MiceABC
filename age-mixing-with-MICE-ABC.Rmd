@@ -23,7 +23,7 @@ library(boot)
 library(haven)
 library(ggplot2)
 
-relations.data.path <- "/Users/wimdelva/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
+relations.data.path <- "/Users/delvaw/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
 
 data.relations <- read_dta(file = relations.data.path)
 #names(data.relations)
@@ -63,6 +63,18 @@ md.wideBW <- dplyr::filter(data.filtered,
 #Negative binomial model
 ###################################
 # Model for black men in the last year
+intercept.Bm <- glm.nb(totalpartnerslstyr~1,
+                       data = md.wideBM,
+                       control = glm.control(maxit = 100000, trace = 3),
+                       init.theta = 0.5)
+summary(intercept.Bm)
+shape.nb <- as.numeric(intercept.Bm$coefficients) #(r)
+scale.nb <- as.numeric(intercept.Bm$theta) #(theta = p/(1-p))
+random.nb <- rnbinom(n = 10000, size = shape.nb, mu = shape.nb * scale.nb)
+mean(random.nb)
+
+hist(md.wideBM$totalpartnerslstyr)
+mean(md.wideBM$totalpartnerslstyr)
 
 finalBm<-glm.nb(totalpartnerslstyr~ns(age, 3),
                 data=md.wideBM,
