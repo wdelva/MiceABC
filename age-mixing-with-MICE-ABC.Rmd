@@ -1,0 +1,1042 @@
+---
+title: "Mind the age gap: age-mixing patterns predict HIV incidence"
+output: html_notebook
+---
+
+### What are the key features of real life that the model should capture?
+#### Age-mixing
+1. WSD of age gaps
+2. BSD of age gaps
+3. slope
+4. intercept
+
+Important question: should we only have “general population” targets, or also hiv-status and gender specific targets? For now, only general population.
+ 
+#### Sexual activity:
+5. Degree distribution of new sex partners in the last year.
+7. (if GAMM or other multi-parameter model): Extract age effect: Fitting NB distribution to data on number of new relationships in last year, with age covariate.
+```{r nb.params}
+library(dplyr)
+library(MASS)
+library(splines)
+library(boot)
+library(haven)
+library(ggplot2)
+
+relations.data.path <- "/Users/wimdelva/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
+
+data.relations <- read_dta(file = relations.data.path)
+#names(data.relations)
+data.needed <- dplyr::select(data.relations, c(id,
+                                     age,
+                                     race,
+                                     gender,
+                                     cpcount,
+                                     ompcount,
+                                     hivtestresult,
+                                     totalpartners))
+data.needed$cpcount[is.na(data.needed$cpcount)] <- 0
+data.needed$ompcount[is.na(data.needed$ompcount)] <- 0
+
+#########################################################################################
+# data.filtered is the dataset for the partner turnover analysis
+
+data.filtered <- dplyr::filter(data.needed,
+                               race == 2,
+                               gender != "2",
+                               age >= 15,
+                               age < 50)
+
+data.filtered$totalpartnerslstyr <- data.filtered$cpcount +
+  data.filtered$ompcount # Total NEW relationships formed in the last year
+
+# We create 4 subsets, one for each race-gender stratum
+md.wideBM <- dplyr::filter(data.filtered,
+                           race == 2,
+                           gender == "0")    # Let's ONLY WORK WITH THIS STRATUM
+
+md.wideBW <- dplyr::filter(data.filtered,
+                           race == 2,
+                           gender == "1")
+
+###################################
+#Negative binomial model
+###################################
+# Model for black men in the last year
+
+finalBm<-glm.nb(totalpartnerslstyr~ns(age, 3),
+                data=md.wideBM,
+                control=glm.control(maxit=100000, trace = 3),
+                init.theta=0.5)
+
+summary(finalBm)
+
+###############################################################################
+# Made up data set to predict the expected number of sexual partners per age
+##############################################################################
+madeforBM<-data.frame(age = 15:49, gender = "man", race = "African")
+
+madeforBM$totalpartnerslstyr <- NA
+########################################################################################
+tryBM<-predict(finalBm,newdata=madeforBM,type="response")
+madeforBM$try<-tryBM;
+
+### Final step: plotting the results
+plot(seq(15, 49), tryBM, type="l", col="navyblue",main="Black men",xlab="Age",ylab="Partnerslastyear")
+
+
+
+wds.general <- 3
+bsd.general <- 1.5
+slope.general <- 0.7
+intercept.general <- -1 # average age of partners of 15 year-old boys is 16
+
+
+
+```
+
+10. Concurrency: see Delva-Meng-Beauclair paper
+
+11. Epidemic trajectory: prevalence by age and gender, by age-groups as per Beauclair 2017 PLoS ONE
+ 
+
+```{r define.summary.statistics}
+wds.general <- 3
+bsd.general <- 1.5
+slope.general <- 0.7
+intercept.general <- -1 # average age of partners of 15 year-old boys is 16
+
+
+
+```
+
+
+```{r define.wrapper.function, echo = FALSE}
+
+library(devtools)
+#install_github("wdelva/RSimpactHelp")
+library(RSimpactCyan)
+library(RSimpactHelper)
+library(ggplot2)
+library(GGally)
+library(lmtest)
+library(mice)
+library(miceadds)
+library(parallel)
+library(randtoolbox)
+library(RSimpactHelper)
+library(EasyABC)
+library(dplyr)
+library(tidyr)
+library(nlme)
+library(boot)
+
+
+# Let's create a colour palette that is colourblind-friendly
+# The palette with black:
+cb.Palette <- c("#F0E442", "#D55E00", "#0072B2", "#E69F00", "#999999")
+#                yellow      red         blue     orange      grey
+
+
+
+# First we define a simpact wrapper function that takes as argument a vector of model parameter values and returns a vector of summary statistics
+
+
+
+# A wrapper function to run Simpact once
+# input.vector <- c(0, 3, -0.5, 0)
+simpact.wrapper.master <- function(inputvector = input.vector){
+  library(RSimpactHelper)
+  library(RSimpactCyan)
+  library(magrittr)
+  library(dplyr)
+  library(nlme)
+
+  agemixing.lme.errFunction <- function(e)
+  {
+    return(list())
+  }
+
+  agemixing.lme.fitter <- function(data = dplyr::filter(agemix.model[[1]], Gender =="male")){
+    men.lme <- lme(pagerelform ~ agerelform0,
+                   data = data,
+                   control=lmeControl(maxIter=10000, returnObject=TRUE, opt = "optim"),
+                   random = ~1 | ID,
+                   method = "REML",
+                   weight = varPower(value = 0.5, form = ~agerelform0 + 1))
+  }
+
+
+  scenario <- function(interventionlist, tasp.indicator) {
+    switch(tasp.indicator+1, interventionlist[1:4], interventionlist[1:5])
+  } 
+
+  
+  
+  cd4.atARTinit <- function(datalist = datalist,
+                          agegroup = c(15, 30),
+                          timewindow = c(15, 30),
+                          cd4count=350, site="All"){
+
+  cd4.atARTinit <- age.group.time.window(datalist = datalist,
+                                        agegroup = agegroup,
+                                         timewindow = timewindow, site="All")
+
+  cd4.atARTinit <- subset(cd4.atARTinit, TreatTime !=Inf) #HIV positive individuals
+
+  raw.df <- data.frame(cd4.atARTinit)
+  art.df <- subset(datalist$ttable, ID %in% cd4.atARTinit$ID &
+                     TStart > timewindow[1] & TStart < timewindow[2])
+
+  ##What if the person dropped out and come back again?
+  art.df <- data.frame(dplyr::summarise(dplyr::group_by(art.df, ID, Gender),
+                                       CD4atARTstart = min(CD4atARTstart)))
+
+  #indicate those who started their treatment when their CD4 count was below a given threshold
+  art.df <- art.df %>% dplyr::mutate(ART.start.CD4 = CD4atARTstart < cd4count)
+
+  # Now we apply the left_join dplyr function to add the ART status to raw.df.
+  raw.df <- dplyr::left_join(x = raw.df, y = art.df, by = c("ID", "Gender"))
+
+  #provide a summary of those that are on treatment and those that started below a threshold
+  cd4count.atARTInit <- data.frame(dplyr::summarise(dplyr::group_by(raw.df, Gender),
+                                                    TotalCases = n(),
+                                                    LessCD4initThreshold =sum(ART.start.CD4)))
+
+  return(cd4count.atARTInit)
+}
+
+  destDir <- "/Users/wimdelva/Downloads"
+  age.distr <- agedistr.creator(shape = 5, scale = 65)
+  cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
+                                   population.simtime = 40,
+                                   population.nummen = 2500,
+                                   population.numwomen = 2500,
+                                   hivseed.time = 10,
+                                   hivseed.type = "amount",
+                                   hivseed.amount = 30,
+                                   hivseed.age.min = 20,
+                                   hivseed.age.max = 50,
+                                   hivtransmission.param.a = -1,
+                                   hivtransmission.param.b = -90,
+                                   hivtransmission.param.c = 0.5,
+                                   hivtransmission.param.f1 = log(2),
+                                   hivtransmission.param.f2 = log(log(1.4) / log(2)) / 5,
+                                   formation.hazard.agegapry.gap_factor_man_age = -0.01, #-0.01472653928518528523251061,
+                                   formation.hazard.agegapry.gap_factor_woman_age = -0.01, #-0.0726539285185285232510561,
+                                   formation.hazard.agegapry.meanage = -0.025,
+                                   formation.hazard.agegapry.gap_factor_man_const = 0,
+                                   formation.hazard.agegapry.gap_factor_woman_const = 0,
+                                   formation.hazard.agegapry.gap_factor_man_exp = -1, #-6,#-1.5,
+                                   formation.hazard.agegapry.gap_factor_woman_exp = -1, #-6,#-1.5,
+                                   formation.hazard.agegapry.gap_agescale_man = 0.25,
+                                   formation.hazard.agegapry.gap_agescale_woman = 0.25,#-0.30000007,#-0.03,
+                                   debut.debutage = 15,
+                                   conception.alpha_base = -2.5#,
+                                   #person.art.accept.threshold.dist.fixed.value = 0
+  )
+  # cfg.list["diagnosis.baseline"] <- 100
+  # cfg.list["diagnosis.HSV2factor"] <- 0
+  # cfg.list["diagnosis.agefactor"] <- 0
+  # cfg.list["diagnosis.beta"] <- 0
+  # cfg.list["diagnosis.diagpartnersfactor"] <- 0
+  # cfg.list["diagnosis.genderfactor"] <- 0
+  # cfg.list["diagnosis.isdiagnosedfactor"] <- 0
+  # cfg.list["diagnosis.t_max"] <- 200
+  cfg.list["formation.hazard.agegapry.baseline"] <- 2
+  cfg.list["mortality.aids.survtime.C"] <- 65
+  cfg.list["mortality.aids.survtime.k"] <- -0.2
+  cfg.list["monitoring.fraction.log_viralload"] <- 0.3
+  cfg.list["dropout.interval.dist.uniform.min"] <- 100
+  cfg.list["dropout.interval.dist.uniform.max"] <- 200
+
+  cfg.list["person.agegap.man.dist.type"] <- "normal" #fixed
+  #cfg.list["person.agegap.man.dist.fixed.value"] <- -6
+  cfg.list["person.agegap.woman.dist.type"] <- "normal" #"fixed"
+  #cfg.list["person.agegap.woman.dist.fixed.value"] <- -6
+
+  cfg.list["mortality.aids.survtime.C"] <- 65
+  cfg.list["mortality.aids.survtime.k"] <- -0.2
+  #cfg.list["monitoring.cd4.threshold"] <- 0
+  cfg.list["person.agegap.man.dist.normal.mu"] <- 0
+  cfg.list["person.agegap.woman.dist.normal.mu"] <- 0
+  cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[2] ######### 3
+  cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[2] ######### 3
+
+  cfg.list["person.survtime.logoffset.dist.type"] <- "normal"
+  cfg.list["person.survtime.logoffset.dist.normal.mu"] <- 0
+  cfg.list["person.survtime.logoffset.dist.normal.sigma"] <- 0.1
+
+  cfg <- cfg.list
+  seedid <- inputvector[1]
+  #cfg["person.agegap.man.dist.fixed.value"] <- -2 # inputvector[2]
+  #cfg["person.agegap.woman.dist.fixed.value"] <- -2 # inputvector[2]
+  cfg["formation.hazard.agegapry.gap_factor_man_exp"] <- inputvector[3] ######### -0.5
+  cfg["formation.hazard.agegapry.gap_factor_woman_exp"] <- inputvector[3] ######### -0.5
+
+  # Let's introduce ART, and evaluate whether the HIV prevalence drops less  rapidly
+  art.intro <- list()
+  art.intro["time"] <- 25
+  art.intro["person.art.accept.threshold.dist.fixed.value"] <- inputvector[4] ######### 0.5
+  art.intro["diagnosis.baseline"] <- 0#100
+  art.intro["monitoring.cd4.threshold"] <- 100 # 1200
+  #art.intro["monitoring.interval.piecewise.cd4s"] <- "0,1300"
+
+
+  # Gradual increase in CD4 threshold. in 2007:200. in 2010:350. in 2013:500
+
+  art.intro2 <- list()
+  art.intro2["time"] <- 25 + inputvector[5] ######### 30
+  art.intro2["monitoring.cd4.threshold"] <- 200
+
+  art.intro3 <- list()
+  art.intro3["time"] <- inputvector[4] + inputvector[5] + inputvector[6] ########### 33
+  art.intro3["monitoring.cd4.threshold"] <- 350
+
+  art.intro4 <- list()
+  art.intro4["time"] <- inputvector[4] + inputvector[5] + inputvector[6] + inputvector[7] ########### 36
+  art.intro4["monitoring.cd4.threshold"] <- 500
+
+  art.intro5 <- list()
+  art.intro5["time"] <- 38
+  art.intro5["monitoring.cd4.threshold"] <- 5000 # This is equivalent to immediate access
+  art.intro5["person.art.accept.threshold.dist.fixed.value"] <- inputvector[8] ########### 0.75
+
+  tasp.indicator <- inputvector[9] # 1 if the scenario is TasP, 0 if the scenario is current status
+  
+  interventionlist <- list(art.intro, art.intro2, art.intro3, art.intro4, art.intro5)
+  
+  intervention <- scenario(interventionlist, tasp.indicator)
+
+  results <- simpact.run(configParams = cfg,
+                         destDir = destDir,
+                         agedist = age.distr,
+                         seed = seedid, #, Introducing ART has helped to keep the prevalence high
+                         intervention = intervention)
+
+  datalist.agemix <- readthedata(results)
+  agemix.df <- agemix.df.maker(datalist.agemix)
+
+  agemix.model <- pattern.modeller(dataframe = agemix.df,
+                                   agegroup = c(15, 50),
+                                   timepoint = datalist.agemix$itable$population.simtime[1],
+                                   timewindow = 3)
+
+  men.lme <- tryCatch(agemixing.lme.fitter(data = dplyr::filter(agemix.model[[1]], Gender =="male")),
+                      error = agemixing.lme.errFunction) # Returns an empty list if the lme model can't be fitted
+
+  bignumber <- NA # let's try if NA works (instead of 9999 for example)
+
+  AAD <- ifelse(length(men.lme) > 0, mean(dplyr::filter(agemix.model[[1]], Gender =="male")$AgeGap), bignumber)
+  SDAD <- ifelse(length(men.lme) > 0, sd(dplyr::filter(agemix.model[[1]], Gender =="male")$AgeGap), bignumber)
+  powerm <- ifelse(length(men.lme) > 0, as.numeric(attributes(men.lme$apVar)$Pars["varStruct.power"]), bignumber)
+  slopem <- ifelse(length(men.lme) > 0, summary(men.lme)$tTable[2, 1], bignumber)
+  WVAD.base <- ifelse(length(men.lme) > 0, men.lme$sigma^2, bignumber)
+  BVAD <- ifelse(length(men.lme) > 0, getVarCov(men.lme)[1,1], bignumber)
+
+  #agegap.mean <- mean(datalist.agemix$rtable$AgeGap)
+  #agegap.sd <- sd(datalist.agemix$rtable$AgeGap)
+  hivprev.15.50 <- prevalence.calculator(datalist = datalist.agemix,
+                        agegroup = c(15, 50),
+                        timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[3]
+  # ART coverage vector
+  ART.cov.eval.timepoints <- seq(from = intervention[[1]]$time,
+                                          to = datalist.agemix$itable$population.simtime[1])
+  ART.cov.vector <- rep(NA, length(ART.cov.eval.timepoints))
+  for (art.cov.index in 1:length(ART.cov.vector)){
+    ART.cov.vector[art.cov.index] <- sum(ART.coverage.calculator(datalist = datalist.agemix,
+                          agegroup = c(15, 50),
+                          timepoint = ART.cov.eval.timepoints[art.cov.index])$sum.onART) /
+      sum(ART.coverage.calculator(datalist = datalist.agemix,
+                          agegroup = c(15, 50),
+                          timepoint = ART.cov.eval.timepoints[art.cov.index])$sum.cases)
+  }
+  # Vector of the fraction of people who started their treatment when their CD4count was between specified values
+  cd4.atARTinit.fractions.timepoints <- seq(from = intervention[[1]]$time + 5,
+                                          to = datalist.agemix$itable$population.simtime[1],
+                                          by = 5) #30, 35, 40
+  cd4.any.vector <- cd4.lt100.vector <- cd4.100.200.vector <- cd4.200.350.vector <- cd4.350.500.vector <- cd4.500plus.vector <- rep(NA, length(cd4.atARTinit.fractions.timepoints))
+  for (cd4.index in 1:length(cd4.lt100.vector)){
+    cd4.lt100.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart < 100) %>% select(ID) %>% unique() %>% nrow()
+    cd4.100.200.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart >= 100,
+                                                       CD4atARTstart < 200) %>% select(ID) %>% unique() %>% nrow()
+    cd4.200.350.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart >= 200,
+                                                       CD4atARTstart < 350) %>% select(ID) %>% unique() %>% nrow()
+    cd4.350.500.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart >= 350,
+                                                       CD4atARTstart < 500) %>% select(ID) %>% unique() %>% nrow()
+    cd4.500plus.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart >= 500) %>% select(ID) %>% unique() %>% nrow()
+    cd4.any.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5)) %>% select(ID) %>% unique() %>% nrow()
+  }
+  
+  incid.final <- incidence.calculator(datalist = datalist.agemix,
+                                      agegroup = c(15, 50),
+                                      timewindow = c((datalist.agemix$itable$population.simtime[1] - 2), datalist.agemix$itable$population.simtime[1]),
+                                      only.active = "No")$incidence[3]
+  
+  growthrate <- pop.growth.calculator(datalist = datalist.agemix,
+                        timewindow = c(0, datalist.agemix$itable$population.simtime[1]))
+
+  outputvector <- c(AAD, SDAD, powerm, slopem, WVAD.base, BVAD, hivprev.15.50, growthrate,
+                    ART.cov.vector,
+                    cd4.lt100.vector/cd4.any.vector,
+                    cd4.100.200.vector/cd4.any.vector,
+                    cd4.200.350.vector/cd4.any.vector,
+                    cd4.350.500.vector/cd4.any.vector,
+                    cd4.500plus.vector/cd4.any.vector,
+                    incid.final)
+  return(outputvector)
+}
+
+
+
+
+
+
+simpact.wrapper <- function(inputvector = input.vector){ # This function does not produce the incidence and does not have an input for the model scenario
+  library(RSimpactHelper)
+  library(RSimpactCyan)
+  library(magrittr)
+  library(dplyr)
+  library(nlme)
+
+  agemixing.lme.errFunction <- function(e)
+  {
+    return(list())
+  }
+
+  agemixing.lme.fitter <- function(data = dplyr::filter(agemix.model[[1]], Gender =="male")){
+    men.lme <- lme(pagerelform ~ agerelform0,
+                   data = data,
+                   control=lmeControl(maxIter=10000, returnObject=TRUE, opt = "optim"),
+                   random = ~1 | ID,
+                   method = "REML",
+                   weight = varPower(value = 0.5, form = ~agerelform0 + 1))
+  }
+
+
+  # scenario <- function(interventionlist, tasp.indicator) {
+  #   switch(tasp.indicator+1, interventionlist[1:4], interventionlist[1:5])
+  # } 
+
+  
+  
+  cd4.atARTinit <- function(datalist = datalist,
+                          agegroup = c(15, 30),
+                          timewindow = c(15, 30),
+                          cd4count=350, site="All"){
+
+  cd4.atARTinit <- age.group.time.window(datalist = datalist,
+                                        agegroup = agegroup,
+                                         timewindow = timewindow, site="All")
+
+  cd4.atARTinit <- subset(cd4.atARTinit, TreatTime !=Inf) #HIV positive individuals
+
+  raw.df <- data.frame(cd4.atARTinit)
+  art.df <- subset(datalist$ttable, ID %in% cd4.atARTinit$ID &
+                     TStart > timewindow[1] & TStart < timewindow[2])
+
+  ##What if the person dropped out and come back again?
+  art.df <- data.frame(dplyr::summarise(dplyr::group_by(art.df, ID, Gender),
+                                       CD4atARTstart = min(CD4atARTstart)))
+
+  #indicate those who started their treatment when their CD4 count was below a given threshold
+  art.df <- art.df %>% dplyr::mutate(ART.start.CD4 = CD4atARTstart < cd4count)
+
+  # Now we apply the left_join dplyr function to add the ART status to raw.df.
+  raw.df <- dplyr::left_join(x = raw.df, y = art.df, by = c("ID", "Gender"))
+
+  #provide a summary of those that are on treatment and those that started below a threshold
+  cd4count.atARTInit <- data.frame(dplyr::summarise(dplyr::group_by(raw.df, Gender),
+                                                    TotalCases = n(),
+                                                    LessCD4initThreshold =sum(ART.start.CD4)))
+
+  return(cd4count.atARTInit)
+}
+
+  destDir <- "/Users/wimdelva/Downloads"
+  age.distr <- agedistr.creator(shape = 5, scale = 65)
+  cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
+                                   population.simtime = 40,
+                                   population.nummen = 2500,
+                                   population.numwomen = 2500,
+                                   hivseed.time = 10,
+                                   hivseed.type = "amount",
+                                   hivseed.amount = 30,
+                                   hivseed.age.min = 20,
+                                   hivseed.age.max = 50,
+                                   hivtransmission.param.a = -1,
+                                   hivtransmission.param.b = -90,
+                                   hivtransmission.param.c = 0.5,
+                                   hivtransmission.param.f1 = log(2),
+                                   hivtransmission.param.f2 = log(log(1.4) / log(2)) / 5,
+                                   formation.hazard.agegapry.gap_factor_man_age = -0.01, #-0.01472653928518528523251061,
+                                   formation.hazard.agegapry.gap_factor_woman_age = -0.01, #-0.0726539285185285232510561,
+                                   formation.hazard.agegapry.meanage = -0.025,
+                                   formation.hazard.agegapry.gap_factor_man_const = 0,
+                                   formation.hazard.agegapry.gap_factor_woman_const = 0,
+                                   formation.hazard.agegapry.gap_factor_man_exp = -1, #-6,#-1.5,
+                                   formation.hazard.agegapry.gap_factor_woman_exp = -1, #-6,#-1.5,
+                                   formation.hazard.agegapry.gap_agescale_man = 0.25,
+                                   formation.hazard.agegapry.gap_agescale_woman = 0.25,#-0.30000007,#-0.03,
+                                   debut.debutage = 15,
+                                   conception.alpha_base = -2.5#,
+                                   #person.art.accept.threshold.dist.fixed.value = 0
+  )
+  # cfg.list["diagnosis.baseline"] <- 100
+  # cfg.list["diagnosis.HSV2factor"] <- 0
+  # cfg.list["diagnosis.agefactor"] <- 0
+  # cfg.list["diagnosis.beta"] <- 0
+  # cfg.list["diagnosis.diagpartnersfactor"] <- 0
+  # cfg.list["diagnosis.genderfactor"] <- 0
+  # cfg.list["diagnosis.isdiagnosedfactor"] <- 0
+  # cfg.list["diagnosis.t_max"] <- 200
+  cfg.list["formation.hazard.agegapry.baseline"] <- 2
+  cfg.list["mortality.aids.survtime.C"] <- 65
+  cfg.list["mortality.aids.survtime.k"] <- -0.2
+  cfg.list["monitoring.fraction.log_viralload"] <- 0.3
+  cfg.list["dropout.interval.dist.uniform.min"] <- 100
+  cfg.list["dropout.interval.dist.uniform.max"] <- 200
+
+  cfg.list["person.agegap.man.dist.type"] <- "normal" #fixed
+  #cfg.list["person.agegap.man.dist.fixed.value"] <- -6
+  cfg.list["person.agegap.woman.dist.type"] <- "normal" #"fixed"
+  #cfg.list["person.agegap.woman.dist.fixed.value"] <- -6
+
+  cfg.list["mortality.aids.survtime.C"] <- 65
+  cfg.list["mortality.aids.survtime.k"] <- -0.2
+  #cfg.list["monitoring.cd4.threshold"] <- 0
+  cfg.list["person.agegap.man.dist.normal.mu"] <- 0
+  cfg.list["person.agegap.woman.dist.normal.mu"] <- 0
+  cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[2] ######### 3
+  cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[2] ######### 3
+
+  cfg.list["person.survtime.logoffset.dist.type"] <- "normal"
+  cfg.list["person.survtime.logoffset.dist.normal.mu"] <- 0
+  cfg.list["person.survtime.logoffset.dist.normal.sigma"] <- 0.1
+
+  cfg <- cfg.list
+  seedid <- inputvector[1]
+  #cfg["person.agegap.man.dist.fixed.value"] <- -2 # inputvector[2]
+  #cfg["person.agegap.woman.dist.fixed.value"] <- -2 # inputvector[2]
+  cfg["formation.hazard.agegapry.gap_factor_man_exp"] <- inputvector[3] ######### -0.5
+  cfg["formation.hazard.agegapry.gap_factor_woman_exp"] <- inputvector[3] ######### -0.5
+
+  # Let's introduce ART, and evaluate whether the HIV prevalence drops less  rapidly
+  art.intro <- list()
+  art.intro["time"] <- 25
+  art.intro["person.art.accept.threshold.dist.fixed.value"] <- inputvector[4] ######### 0.5
+  art.intro["diagnosis.baseline"] <- 0#100
+  art.intro["monitoring.cd4.threshold"] <- 100 # 1200
+  #art.intro["monitoring.interval.piecewise.cd4s"] <- "0,1300"
+
+
+  # Gradual increase in CD4 threshold. in 2007:200. in 2010:350. in 2013:500
+
+  art.intro2 <- list()
+  art.intro2["time"] <- 25 + inputvector[5] ######### 30
+  art.intro2["monitoring.cd4.threshold"] <- 200
+
+  art.intro3 <- list()
+  art.intro3["time"] <- inputvector[4] + inputvector[5] + inputvector[6] ########### 33
+  art.intro3["monitoring.cd4.threshold"] <- 350
+
+  art.intro4 <- list()
+  art.intro4["time"] <- inputvector[4] + inputvector[5] + inputvector[6] + inputvector[7] ########### 36
+  art.intro4["monitoring.cd4.threshold"] <- 500
+
+  art.intro5 <- list()
+  art.intro5["time"] <- 38
+  art.intro5["monitoring.cd4.threshold"] <- 5000 # This is equivalent to immediate access
+  art.intro5["person.art.accept.threshold.dist.fixed.value"] <- inputvector[8] ########### 0.75
+
+  # tasp.indicator <- inputvector[9] # 1 if the scenario is TasP, 0 if the scenario is current status
+  
+  interventionlist <- list(art.intro, art.intro2, art.intro3, art.intro4, art.intro5)
+  
+  intervention <- interventionlist # scenario(interventionlist, tasp.indicator)
+
+  results <- simpact.run(configParams = cfg,
+                         destDir = destDir,
+                         agedist = age.distr,
+                         seed = seedid, #, Introducing ART has helped to keep the prevalence high
+                         intervention = intervention)
+
+  datalist.agemix <- readthedata(results)
+  agemix.df <- agemix.df.maker(datalist.agemix)
+
+  agemix.model <- pattern.modeller(dataframe = agemix.df,
+                                   agegroup = c(15, 50),
+                                   timepoint = datalist.agemix$itable$population.simtime[1],
+                                   timewindow = 3)
+
+  men.lme <- tryCatch(agemixing.lme.fitter(data = dplyr::filter(agemix.model[[1]], Gender =="male")),
+                      error = agemixing.lme.errFunction) # Returns an empty list if the lme model can't be fitted
+
+  bignumber <- NA # let's try if NA works (instead of 9999 for example)
+
+  AAD <- ifelse(length(men.lme) > 0, mean(dplyr::filter(agemix.model[[1]], Gender =="male")$AgeGap), bignumber)
+  SDAD <- ifelse(length(men.lme) > 0, sd(dplyr::filter(agemix.model[[1]], Gender =="male")$AgeGap), bignumber)
+  powerm <- ifelse(length(men.lme) > 0, as.numeric(attributes(men.lme$apVar)$Pars["varStruct.power"]), bignumber)
+  slopem <- ifelse(length(men.lme) > 0, summary(men.lme)$tTable[2, 1], bignumber)
+  WVAD.base <- ifelse(length(men.lme) > 0, men.lme$sigma^2, bignumber)
+  BVAD <- ifelse(length(men.lme) > 0, getVarCov(men.lme)[1,1], bignumber)
+
+  #agegap.mean <- mean(datalist.agemix$rtable$AgeGap)
+  #agegap.sd <- sd(datalist.agemix$rtable$AgeGap)
+  hivprev.15.50 <- prevalence.calculator(datalist = datalist.agemix,
+                        agegroup = c(15, 50),
+                        timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[3]
+  # ART coverage vector
+  ART.cov.eval.timepoints <- seq(from = intervention[[1]]$time,
+                                          to = datalist.agemix$itable$population.simtime[1])
+  ART.cov.vector <- rep(NA, length(ART.cov.eval.timepoints))
+  for (art.cov.index in 1:length(ART.cov.vector)){
+    ART.cov.vector[art.cov.index] <- sum(ART.coverage.calculator(datalist = datalist.agemix,
+                          agegroup = c(15, 50),
+                          timepoint = ART.cov.eval.timepoints[art.cov.index])$sum.onART) /
+      sum(ART.coverage.calculator(datalist = datalist.agemix,
+                          agegroup = c(15, 50),
+                          timepoint = ART.cov.eval.timepoints[art.cov.index])$sum.cases)
+  }
+  # Vector of the fraction of people who started their treatment when their CD4count was between specified values
+  cd4.atARTinit.fractions.timepoints <- seq(from = intervention[[1]]$time + 5,
+                                          to = datalist.agemix$itable$population.simtime[1],
+                                          by = 5) #30, 35, 40
+  cd4.any.vector <- cd4.lt100.vector <- cd4.100.200.vector <- cd4.200.350.vector <- cd4.350.500.vector <- cd4.500plus.vector <- rep(NA, length(cd4.atARTinit.fractions.timepoints))
+  for (cd4.index in 1:length(cd4.lt100.vector)){
+    cd4.lt100.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart < 100) %>% select(ID) %>% unique() %>% nrow()
+    cd4.100.200.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart >= 100,
+                                                       CD4atARTstart < 200) %>% select(ID) %>% unique() %>% nrow()
+    cd4.200.350.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart >= 200,
+                                                       CD4atARTstart < 350) %>% select(ID) %>% unique() %>% nrow()
+    cd4.350.500.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart >= 350,
+                                                       CD4atARTstart < 500) %>% select(ID) %>% unique() %>% nrow()
+    cd4.500plus.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+                                                       CD4atARTstart >= 500) %>% select(ID) %>% unique() %>% nrow()
+    cd4.any.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5)) %>% select(ID) %>% unique() %>% nrow()
+  }
+  
+  # incid.final <- incidence.calculator(datalist = datalist.agemix,
+  #                                     agegroup = c(15, 50),
+  #                                     timewindow = c((datalist.agemix$itable$population.simtime[1] - 2), datalist.agemix$itable$population.simtime[1]),
+  #                                     only.active = "No")$incidence[3]
+  
+  growthrate <- pop.growth.calculator(datalist = datalist.agemix,
+                        timewindow = c(0, datalist.agemix$itable$population.simtime[1]))
+
+  outputvector <- c(AAD, SDAD, powerm, slopem, WVAD.base, BVAD, hivprev.15.50, growthrate,
+                    exp(ART.cov.vector),
+                    exp(cd4.lt100.vector/cd4.any.vector),
+                    exp(cd4.100.200.vector/cd4.any.vector),
+                    exp(cd4.200.350.vector/cd4.any.vector),
+                    exp(cd4.350.500.vector/cd4.any.vector),
+                    exp(cd4.500plus.vector/cd4.any.vector))#,
+                    #incid.final)
+  return(outputvector)
+}
+```
+
+
+
+```{r define.parallel.function.evaluator, echo = FALSE}
+# A function to run Simpact in parallel
+simpact.parallel <- function(model = simpact.wrapper,
+                             actual.input.matrix = matrix(rep(c(-6, -6), 16), nrow = 16),
+                             #nb_simul = 16,
+                             seed_count = 0,
+                             n_cluster = 8){
+  cl <- makeCluster(getOption("cl.cores", n_cluster))
+  tab_simul_summarystat = NULL
+  list_param <- list(NULL)
+  tab_param <- NULL
+  paramtemp <- NULL
+  simultemp <- NULL
+
+  nb_simul <- nrow(actual.input.matrix)
+
+  for (i in 1:nb_simul) {
+    l <- ncol(actual.input.matrix)
+    param <- c((seed_count + i), actual.input.matrix[i, ])
+    list_param[[i]] <- param
+    tab_param <- rbind(tab_param, param[2:(l + 1)])
+    paramtemp <- rbind(paramtemp, param[2:(l + 1)])
+  }
+  list_simul_summarystat = parLapplyLB(cl, list_param,
+                                       model)
+  tab_simul_summarystat <- do.call(rbind, list_simul_summarystat)
+  stopCluster(cl)
+  return(tab_simul_summarystat)
+}
+
+```
+
+
+
+Let's create the "truth" with the master model.
+```{r truth, cache = TRUE, echo = FALSE, message = FALSE, warning = FALSE, results = "hide", eval = FALSE}
+reps <- 10
+design.matrix.control <- matrix(rep(c(3, -0.5, 0.5, 5, 3, 3, 0.75, 0), reps), nrow = reps, byrow = TRUE)
+design.matrix.interv <- matrix(rep(c(3, -0.5, 0.5, 5, 3, 3, 0.75, 1), reps), nrow = reps, byrow = TRUE)
+sumsmstats.control.df <- simpact.parallel(model = simpact.wrapper.master,
+                                  actual.input.matrix = design.matrix.control,
+                                  seed_count = 0,
+                                  n_cluster = 8)
+sumsmstats.interv.df <- simpact.parallel(model = simpact.wrapper.master,
+                                  actual.input.matrix = design.matrix.interv,
+                                  seed_count = 0,
+                                  n_cluster = 8)
+
+```
+
+
+```{r loadmastermodeloutput}
+load(file = "/Users/wimdelva/Documents/MiceABC/incidence.rel.reduc.RData")
+```
+
+
+
+Now let's subtract the incidence estimates from one another.
+```{r impact.estimation}
+
+summary.interv <- summary(sumsmstats.interv.df)
+#colMeans(sumsmstats.interv.df, na.rm = TRUE)
+
+#lastcolumn <- ncol(sumsmstats.control.df)
+#incidence.rel.reduc <- (sumsmstats.control.df[,lastcolumn] - sumsmstats.interv.df[,lastcolumn]) / sumsmstats.control.df[,lastcolumn]
+#hist(incidence.rel.reduc, 20)
+#summary(incidence.rel.reduc)
+#predict.95.percent.interval.incidence.rel.reduc <- quantile(incidence.rel.reduc, probs = c(0.025, 0.975), na.rm = TRUE)
+
+summary.interv.master <- summary.interv # summary(sumsmstats.interv.df)
+target.vector.master <- colMeans(sumsmstats.interv.df, na.rm =TRUE)
+target.vector.trainer <- head(target.vector.master, -1)
+target.vector.trainer[9:length(target.vector.trainer)] <- exp(target.vector.trainer[9:length(target.vector.trainer)])
+# We're turning target zeros into target ones
+```
+
+
+```{r myprob}
+mice.impute.myprob <- function (y, ry, x, ...) 
+{
+    #aug <- mice:::augment(y, ry, x, ...)
+    #x <- aug$x
+    #y <- aug$y
+    #ry <- aug$ry
+    #w <- aug$w
+    x <- cbind(1, as.matrix(x))
+    expr <- expression(glm.fit(x[ry, ], y[ry], family = binomial(link = logit)))# expression(glm.fit(x[ry, ], y[ry], family = binomial(link = logit), weights = w[ry]))
+    fit <- suppressWarnings(eval(expr))
+    fit.sum <- summary.glm(fit)
+    beta <- coef(fit)
+    rv <- t(chol(mice:::sym(fit.sum$cov.unscaled)))
+    beta.star <- beta + rv %*% rnorm(ncol(rv))
+    p <- 1/(1 + exp(-(x[!ry, ] %*% beta.star)))
+    # vec <- (runif(nrow(p)) <= p)
+    # vec[vec] <- 1
+    # if (is.factor(y)) {
+    #     vec <- factor(vec, c(0, 1), levels(y))
+    # }
+    # return(vec)
+    return(p)
+}
+```
+
+
+```{r MICE_ABC, cache = TRUE, eval = FALSE}
+ptm <- proc.time()
+# First 2 parameters can be viewed as continuous variables
+# 3rd and 7th must be viewed as constrained between 0 and 1
+MICE_ABC_testoutput <- MICE_ABC(targets = target.vector.trainer,
+                                 n.experiments = 128,
+                                 lls = c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
+                                 uls = c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
+                                 model = simpact.wrapper,
+                                 maxit = 20,
+                                 maxwaves = 5, # and we can also try 10 to do the same as the 10 waves of Lenormand
+                                 #reps = 5,
+                                 alpha = 0.25,
+                                 saturation.crit = 0)
+mice.timeused <- proc.time() - ptm
+mice.timeused # xxxx seconds
+```
+
+```{r save.calibration.results, eval = FALSE}
+save(MICE_ABC_testoutput, file = "/Users/wimdelva/Documents/MiceABC/mice.tasp.RData")
+
+```
+Now let's explore and visualise the results
+```{r vis.calib.results}
+load(file = "/Users/wimdelva/Documents/MiceABC/reject.tasp.RData")
+load(file = "/Users/wimdelva/Documents/MiceABC/mice.tasp.RData")
+
+# 1. For rejectabc
+# Calculating squared relative distances and sum thereof for the ABC rejection method
+rej.sum.sq.rel.dist <- rep(0, nrow(rejectabc.output$stats))
+for(i in 1:length(target.vector.trainer)) {
+  nam <- paste0("y.", i, ".sq.rel.dist")
+  val <- ((rejectabc.output$stats[,i] - targets[i]) / targets[i])^2
+  assign(nam, val)
+  rej.sum.sq.rel.dist <- rej.sum.sq.rel.dist + get(nam)
+}
+
+#rejectabc.output$y.1.sq.rel.dist <- ((rejectabc.output$stats[,1] - targets[1]) / targets[1])^2
+#rejectabc.output$y.2.sq.rel.dist <- ((rejectabc.output$stats[,2] - targets[2]) / targets[2])^2
+#rejectabc.output$sum.sq.rel.dist <- rejectabc.output$y.1.sq.rel.dist + rejectabc.output$y.2.sq.rel.dist
+dist.order <- order(rej.sum.sq.rel.dist) # Ordering the squared distances from small to big.
+last.one.selected <- 5
+selected.distances <- dist.order[1:last.one.selected]
+best5.rejection <- rep(FALSE, length(dist.order))
+best5.rejection[selected.distances] <- TRUE
+
+abcreject.df <- as.data.frame(cbind(rejectabc.output$param,
+                                    rejectabc.output$stats))
+abcreject.df$best5 <- best5.rejection
+abcreject.df$method <- "rejection"
+
+xvars.names <- paste0("x.", 1:7) # This will also be used by the other methods
+yvars.names <- paste0("y.", 1:39) # This will also be used by the other methods
+names(abcreject.df) <- c(xvars.names, yvars.names, "best5", "method")
+
+
+
+
+# 2. For Lenormandabc
+
+
+
+
+# 3. For miceabc
+# First for the 5 waves
+xplusyvars.length <- ncol(MICE_ABC_testoutput$sim.results.with.design[[1]]) - 1 # The last variable is the sum of squared errors
+miceabc_inout_all <- do.call(rbind, MICE_ABC_testoutput$sim.results.with.design)[,1:xplusyvars.length]
+best5.mice <- miceabc_inout_all$y.1 %in% MICE_ABC_testoutput$inputoutput[[5]]$y.1[1:5]
+abcmice.df <- as.data.frame(cbind(miceabc_inout_all,
+                                  best5.mice))
+abcmice.df$method <- "mice"
+names(abcmice.df) <- c(names(miceabc_inout_all), "best5", "method")     ### The dataset abcmice.df will be merged with other datasets generated by the comparison methods
+
+```
+
+Now that we have calibrated the model with Rejection ABC, let's run the 5 best models many times under the intervention and control scenario, to estimate the impact of TasP. 
+```{r tasp.incid.rel.reduc.rej}
+reps <- 6 # Change to 200 reps eventually
+calib.rej.df <- abcreject.df %>% dplyr::filter(., best5 == TRUE) %>% dplyr::select(., x.1:x.7)
+design.matrix.calib.rej <- matrix(rep(as.numeric(unlist(calib.rej.df)), each = reps), nrow = reps * nrow(calib.rej.df), byrow = FALSE)
+design.matrix.calib.rej.control <- cbind(design.matrix.calib.rej, 0)
+design.matrix.calib.rej.interv <- cbind(design.matrix.calib.rej, 1)
+
+summstats.calib.rej.control.df <- simpact.parallel(model = simpact.wrapper.master,
+                                  actual.input.matrix = design.matrix.calib.rej.control,
+                                  seed_count = 0,
+                                  n_cluster = 8)
+summstats.calib.rej.interv.df <- simpact.parallel(model = simpact.wrapper.master,
+                                  actual.input.matrix = design.matrix.calib.rej.interv,
+                                  seed_count = 0,
+                                  n_cluster = 8)
+lastcolumn.calib.rej <- ncol(summstats.calib.rej.control.df)
+incidence.rel.reduc.calib.rej <- (summstats.calib.rej.control.df[,lastcolumn.calib.rej] - summstats.calib.rej.interv.df[,lastcolumn.calib.rej]) / summstats.calib.rej.control.df[,lastcolumn.calib.rej]
+hist.data.incidence.rel.reduc.calib.rej <- hist(incidence.rel.reduc.calib.rej, 20)
+summary(incidence.rel.reduc.calib.rej)
+predict.95.percent.interval.incidence.rel.reduc.calib.rej <- quantile(incidence.rel.reduc.calib.rej, probs = c(0.025, 0.975), na.rm = TRUE)
+
+
+```
+
+
+
+
+
+
+
+
+
+Now that we have calibrated the model with MICE-Cali, let's run the 5 best models many times under the intervention and control scenario, to estimate the impact of TasP. 
+```{r tasp.incid.rel.reduc.mice}
+reps <- 6 # Change to 200 reps eventually
+calib.mice.df <- abcmice.df %>% dplyr::filter(., best5 == TRUE) %>% dplyr::select(., x.1:x.7)
+design.matrix.calib.mice <- matrix(rep(as.numeric(unlist(calib.mice.df)), each = reps), nrow = reps * nrow(calib.mice.df), byrow = FALSE)
+design.matrix.calib.mice.control <- cbind(design.matrix.calib.mice, 0)
+design.matrix.calib.mice.interv <- cbind(design.matrix.calib.mice, 1)
+
+summstats.calib.mice.control.df <- simpact.parallel(model = simpact.wrapper.master,
+                                  actual.input.matrix = design.matrix.calib.mice.control,
+                                  seed_count = 0,
+                                  n_cluster = 8)
+summstats.calib.mice.interv.df <- simpact.parallel(model = simpact.wrapper.master,
+                                  actual.input.matrix = design.matrix.calib.mice.interv,
+                                  seed_count = 0,
+                                  n_cluster = 8)
+lastcolumn.calib.mice <- ncol(summstats.calib.mice.control.df)
+incidence.rel.reduc.calib.mice <- (summstats.calib.mice.control.df[,lastcolumn.calib.mice] - summstats.calib.mice.interv.df[,lastcolumn.calib.mice]) / summstats.calib.mice.control.df[,lastcolumn.calib.mice]
+hist.data.incidence.rel.reduc.calib.mice <- hist(incidence.rel.reduc.calib.mice, 20)
+summary(incidence.rel.reduc.calib.mice)
+predict.95.percent.interval.incidence.rel.reduc.calib.mice <- quantile(incidence.rel.reduc.calib.mice, probs = c(0.025, 0.975), na.rm = TRUE)
+
+
+```
+
+```{r merging.datasets}
+# Adding the target statistics and their inputs
+target.df <- data.frame(matrix(c(3, -0.5, 0.5, 5, 3, 3, 0.75, target.vector.trainer), nrow = 1), # The inputs and targets
+                        best5 = TRUE, method = "target")
+names(target.df) <- c(names(miceabc_inout_all), "best5", "method")
+
+
+# Now we can rbind these 4 datasets into one dataset that we can plot with ggplot2
+abc.comparison.tasp.df <- rbind(abcreject.df,
+                           #abcLenorm.df,
+                           abcmice.df,
+                           target.df)
+abc.comparison.tasp.df$method <- factor(abc.comparison.tasp.df$method, labels = c("MICE", "Rejection", "Target")) # c("Lenormand", "MICE", "Rejection", "Target"))
+
+abc.comparison.tasp.df$method <- factor(abc.comparison.tasp.df$method,levels(abc.comparison.tasp.df$method)[c(2, 1, 3)]) # c(3, 1, 2, 4) We want the levels in a particular order, for plotting and colour purposes
+#levels(abc.comparison.V8.df$method)
+
+```
+Let's plot how the calibrated models compare against the target statistics and eachother 
+```{r output.comparison}
+# columns 9:24 capture the ART coverage at times 25:40
+
+outputcomparison.data <- as.data.frame(rbind(summstats.calib.rej.interv.df,
+                          summstats.calib.mice.interv.df,
+                          target.vector.master))
+names(outputcomparison.data) <- c(yvars.names, "incid.rel.reduc")
+outputcomparison.data$method <- c(rep(c("Rejection", "MICE"), each = nrow(summstats.calib.rej.interv.df)), "Target")
+
+outputcomparison.data$method <- factor(outputcomparison.data$method, labels = c("MICE", "Rejection", "Target")) # c("Lenormand", "MICE", "Rejection", "Target"))
+
+outputcomparison.data$method <- factor(outputcomparison.data$method,levels(outputcomparison.data$method)[c(1, 2, 3)]) # c(3, 1, 2, 4) We want the levels in a particular order, for plotting and colour purposes
+
+
+outputcomparison.data$is.target <- c(rep(0, nrow(outputcomparison.data)-1), 1)
+outputcomparison.data$unique.ID <- as.character(paste0(outputcomparison.data$y.1, outputcomparison.data$y.2, outputcomparison.data$y.3))
+
+
+###
+# Comparing various output statistics
+library(GGally)
+outputcomparison.data$is.target <- factor(outputcomparison.data$is.target)
+ggpairs(outputcomparison.data[, c(1,2,5,6,7, 41:42)],
+        aes(colour = method,
+            shape = is.target),
+        columns = 1:5,
+        columnLabels = c("AAD", "SDAD", "WVAD.base", "BVAD", "HIV+ 15-50 yo"),
+        upper = list(continuous = "blank")) 
+
+ggpairs(outputcomparison.data[, c(25:30, 33, 36,39, 41:42)],
+        aes(colour = method,
+            shape = is.target),
+        columns = 1:9,
+        columnLabels = c("<100 25-30", "<100 30-35", "<100 35-40", "100-200 25-30", "100-200 30-35", "100-200 35-40", "200-350 35-40", "350-500 35-40", ">500 35-40"),
+        upper = list(continuous = "blank")) 
+
+
+# To plot ART coverage over time, we need to turn wide into long format
+names(outputcomparison.data)[9:24] <- 25:40
+outputcomparison.ARTcoverage.data <- tidyr::gather(data = outputcomparison.data,
+                                            key = Time,
+                                            convert = TRUE,
+                                            value = ART.coverage,
+                                            9:24)
+
+
+ARTcoverage.comparison <- ggplot(data = outputcomparison.ARTcoverage.data,
+                      aes(x = Time,
+                          y = ART.coverage,
+                          alpha = factor(is.target),
+                          group = unique.ID,
+                          col = method)) +
+  geom_line() +
+  scale_colour_manual(values = cb.Palette) +
+  scale_alpha_discrete(breaks = NULL,
+                       range = c(0.2, 1)) +
+  #scale_shape_manual(breaks = NULL,
+  #                   values = c(20, 10)) +
+  #scale_size_manual(breaks = NULL,
+  #                  values = 4) +
+  xlab("Simulation time (years)") +
+  ylab("ART coverage") +
+  theme_bw() +
+  guides(colour = guide_legend(title = "Method"))#,
+                            #   override.aes = list(shape = c(20, 20, 20, 10),
+                             #                      size = c(4, 4, 4, 4))))
+plot(ARTcoverage.comparison)
+
+
+### Now let's plot the TasP impact estimate
+median.impact <- c(median(incidence.rel.reduc.calib.rej), median(incidence.rel.reduc.calib.mice), median(incidence.rel.reduc, na.rm = TRUE))
+mean.impact <- c(mean(incidence.rel.reduc.calib.rej), mean(incidence.rel.reduc.calib.mice), mean(incidence.rel.reduc, na.rm = TRUE))
+p25.impact <- c(quantile(incidence.rel.reduc.calib.rej, probs = 0.25, na.rm = TRUE),
+                quantile(incidence.rel.reduc.calib.mice, probs = 0.25, na.rm = TRUE),
+                quantile(incidence.rel.reduc, probs = 0.25, na.rm = TRUE))
+p75.impact <- c(quantile(incidence.rel.reduc.calib.rej, probs = 0.75, na.rm = TRUE),
+                quantile(incidence.rel.reduc.calib.mice, probs = 0.75, na.rm = TRUE),
+                quantile(incidence.rel.reduc, probs = 0.75, na.rm = TRUE))
+p025.impact <- c(quantile(incidence.rel.reduc.calib.rej, probs = 0.025, na.rm = TRUE),
+                quantile(incidence.rel.reduc.calib.mice, probs = 0.025, na.rm = TRUE),
+                quantile(incidence.rel.reduc, probs = 0.025, na.rm = TRUE))
+p975.impact <- c(quantile(incidence.rel.reduc.calib.rej, probs = 0.975, na.rm = TRUE),
+                quantile(incidence.rel.reduc.calib.mice, probs = 0.975, na.rm = TRUE),
+                quantile(incidence.rel.reduc, probs = 0.975, na.rm = TRUE))
+method <- c("Rejection", "MICE", "Master")
+impact.comparison.data <- data.frame(median.impact = median.impact,
+                                     mean.impact = mean.impact,
+                                     p25.impact = p25.impact,
+                                     p75.impact = p75.impact,
+                                     p025.impact = p025.impact,
+                                     p975.impact = p975.impact,
+                                     method = method)
+
+impact.comparison <- ggplot(data = impact.comparison.data,
+                      aes(x = method,
+                          y = median.impact,
+                          col = method)) +
+  geom_crossbar(aes(ymin = p25.impact, ymax = p75.impact), width = 0.2) +
+  geom_errorbar(aes(ymin = p025.impact, ymax = p975.impact), width = 0.2) +
+  scale_colour_manual(values = c(cb.Palette[3], cb.Palette[1], cb.Palette[2])) +
+  xlab("") +
+  ylim(0, 1) +
+  ylab("Relative Reduction in HIV incidence") +  # TasP effect on HIV incidence in the last 2 years of the simulation
+  theme_bw() +
+  guides(colour = guide_legend(title = "Method"))#,
+                            #   override.aes = list(shape = c(20, 20, 20, 10),
+                             #                      size = c(4, 4, 4, 4))))
+plot(impact.comparison)
+
+```
+
+
+
