@@ -10,7 +10,7 @@ output: html_notebook
 3. slope
 4. intercept
 
-Important question: should we only have “general population” targets, or also hiv-status and gender specific targets? For now, only general population.
+Important question: should we only have “general population” targets, or also hiv-status and gender specific targets? For now, only general male population.
  
 #### Sexual activity:
 Degree distribution of new sex partners in the last year:
@@ -28,7 +28,7 @@ library(fitdistrplus)
 library(lmtest)
 
 
-relations.data.path <- "/Users/delvaw/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
+relations.data.path <- "/Users/wimdelva/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
 
 data.relations <- read_dta(file = relations.data.path)
 #names(data.relations)
@@ -135,7 +135,7 @@ points(seq(15, 49), madeforBM$try.high, col="navyblue")
 7. Concurrency: Beauclair JIAS 2015:Point-prevalence of concurrent partnerships 6 months before survey was 13.4% among black men
 
 #### Epidemic trajectory
-HIV prevalence by age and gender, by age-groups as per Beauclair 2017 (journal unknown yet)
+HIV prevalence by age and gender, by age-groups in 2011 (30 years after introducing HIV) as per Beauclair 2017 (journal unknown yet)
 8. HIV prevalence in women < 25 yo: 0.2
 9. HIV prevalence in men < 25 yo: 0.1
 10. HIV prevalence in women 25 <= x < 35: 0.42
@@ -174,11 +174,11 @@ library(mice)
 library(miceadds)
 library(parallel)
 library(randtoolbox)
-library(RSimpactHelper)
 library(EasyABC)
 library(dplyr)
 library(tidyr)
 library(nlme)
+library(lme4)
 library(boot)
 
 
@@ -256,7 +256,7 @@ simpact.wrapper.master <- function(inputvector = input.vector){
   return(cd4count.atARTInit)
 }
 
-  destDir <- "/Users/wimdelva/Downloads"
+  destDir <- "/Users/wimdelva/temp"
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
                                    population.simtime = 40,
@@ -465,22 +465,89 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   library(magrittr)
   library(dplyr)
   library(nlme)
+  library(lme4)
 
   agemixing.lme.errFunction <- function(e)
   {
     return(list())
   }
 
-  agemixing.lme.fitter <- function(data = dplyr::filter(agemix.model[[1]], Gender =="male")){
-    men.lme <- lme(pagerelform ~ agerelform0,
-                   data = data,
-                   control=lmeControl(maxIter=10000, returnObject=TRUE, opt = "optim"),
-                   random = ~1 | ID,
-                   method = "REML",
-                   weight = varPower(value = 0.5, form = ~agerelform0 + 1))
+  # agemixing.lme.fitter <- function(data = dplyr::filter(agemix.model[[1]], Gender =="male")){
+  #   men.lme <- lme(pagerelform ~ agerelform0,
+  #                  data = data,
+  #                  control=lmeControl(maxIter=10000, returnObject=TRUE, opt = "optim"),
+  #                  random = ~1 | ID,
+  #                  method = "REML",
+  #                  weight = varPower(value = 0.5, form = ~agerelform0 + 1))
+  # }
+
+  ampmodel <- function(data = dplyr::filter(agemix.model[[1]], Gender =="male")) {
+  lmer(pagerelform ~ agerelform0 + (1 | ID),
+            data = data,
+            REML = TRUE)  
+}
+
+
+  
+  bvar <- function(model) {
+  
+  # Outputs a df with between-subject variance, upr & lwr limits
+  
+    # Must take an merMod  object
+    
+    bsd <- as.numeric(as.data.frame(VarCorr(model))[1,5])
+    
+   
   }
-
-
+  
+  
+  
+  degree.df.maker <- function (dataframe.df, agegroup = c(15, 30), hivstatus = 0, 
+    survey.time = 40, window.width = 1, gender.degree = "female", 
+    only.new = TRUE) 
+{
+    dataframe.rels.df <- dataframe.df
+    dataframe.rels.df <- dplyr::select(dataframe.rels.df, -episodeorder, -FormTime, -DisTime)
+    dataframe.rels.df <- unique.data.frame(dataframe.rels.df)
+    rels.form.dis.df <- dplyr::summarise(dplyr::group_by(dataframe.df, 
+        relid), FormTime = min(FormTime), DisTime = max(DisTime))
+    dfnew <- dplyr::left_join(x = dataframe.rels.df, y = rels.form.dis.df, 
+        by = "relid")
+    dfnew <- dplyr::filter(dfnew, TOD > survey.time)
+    {
+        if (hivstatus == 0) {
+            dfnew <- dplyr::filter(dfnew, InfectTime > survey.time)
+        }
+        else if (hivstatus == 1) {
+            dfnew <- dplyr::filter(dfnew, InfectTime <= survey.time)
+        }
+    }
+    {
+        if (only.new) {
+            dfnew <- dplyr::filter(dfnew, FormTime >= survey.time - 
+                window.width, FormTime < survey.time, DisTime > 
+                survey.time - window.width, Gender == gender.degree, 
+                survey.time - TOB >= agegroup[1], survey.time - 
+                  TOB < agegroup[2])
+        }
+        else {
+            dfnew <- dplyr::filter(dfnew, FormTime < survey.time, 
+                DisTime > survey.time - window.width, Gender == 
+                  gender.degree, survey.time - TOB >= agegroup[1], 
+                survey.time - TOB < agegroup[2])
+        }
+    }
+    uniqueOut <- dfnew %>% dplyr::select(ID, relid) %>% distinct %>% 
+        rename(Degree = relid)
+    if (dim(uniqueOut)[1] != 0) {
+        degreedata.df <- aggregate(Degree ~ ID, data = uniqueOut, 
+            length)
+    } else {
+        degreedata.df <- data.frame(ID = NA, Degree = NA)
+    }
+    return(degreedata.df)
+}
+  
   # scenario <- function(interventionlist, tasp.indicator) {
   #   switch(tasp.indicator+1, interventionlist[1:4], interventionlist[1:5])
   # } 
@@ -520,22 +587,22 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   return(cd4count.atARTInit)
 }
 
-  destDir <- "/Users/wimdelva/Downloads"
+  destDir <- "/Users/wimdelva/temp"
   age.distr <- agedistr.creator(shape = 5, scale = 65)
-  cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
-                                   population.simtime = 40,
+  cfg.list <- input.params.creator(population.eyecap.fraction = 0.2, #0.21,#1,
+                                   population.simtime = 35, #40,
                                    population.nummen = 2500,
                                    population.numwomen = 2500,
                                    hivseed.time = 10,
                                    hivseed.type = "amount",
-                                   hivseed.amount = 30,
+                                   hivseed.amount = 25, #30,
                                    hivseed.age.min = 20,
                                    hivseed.age.max = 50,
                                    hivtransmission.param.a = -1,
                                    hivtransmission.param.b = -90,
                                    hivtransmission.param.c = 0.5,
-                                   hivtransmission.param.f1 = log(2),
-                                   hivtransmission.param.f2 = log(log(1.4) / log(2)) / 5,
+                                   hivtransmission.param.f1 = log(inputvector[2]) , #log(2),
+                                   hivtransmission.param.f2 = log((exp(log(inputvector[2]) * 0.5))^2 / log(inputvector[2])) / 5, #log(log(1.4) / log(2)) / 5,
                                    formation.hazard.agegapry.gap_factor_man_age = -0.01, #-0.01472653928518528523251061,
                                    formation.hazard.agegapry.gap_factor_woman_age = -0.01, #-0.0726539285185285232510561,
                                    formation.hazard.agegapry.meanage = -0.025,
@@ -572,10 +639,10 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   cfg.list["mortality.aids.survtime.C"] <- 65
   cfg.list["mortality.aids.survtime.k"] <- -0.2
   #cfg.list["monitoring.cd4.threshold"] <- 0
-  cfg.list["person.agegap.man.dist.normal.mu"] <- 0
-  cfg.list["person.agegap.woman.dist.normal.mu"] <- 0
-  cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[2] ######### 3
-  cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[2] ######### 3
+  cfg.list["person.agegap.man.dist.normal.mu"] <- inputvector[3] # 0
+  cfg.list["person.agegap.woman.dist.normal.mu"] <- inputvector[3] # 0
+  cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[4] ######### 3
+  cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[4] ######### 3
 
   cfg.list["person.survtime.logoffset.dist.type"] <- "normal"
   cfg.list["person.survtime.logoffset.dist.normal.mu"] <- 0
@@ -585,13 +652,13 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   seedid <- inputvector[1]
   #cfg["person.agegap.man.dist.fixed.value"] <- -2 # inputvector[2]
   #cfg["person.agegap.woman.dist.fixed.value"] <- -2 # inputvector[2]
-  cfg["formation.hazard.agegapry.gap_factor_man_exp"] <- inputvector[3] ######### -0.5
-  cfg["formation.hazard.agegapry.gap_factor_woman_exp"] <- inputvector[3] ######### -0.5
+  cfg["formation.hazard.agegapry.gap_factor_man_exp"] <- inputvector[5] ######### -0.5
+  cfg["formation.hazard.agegapry.gap_factor_woman_exp"] <- inputvector[5] ######### -0.5
 
   # Let's introduce ART, and evaluate whether the HIV prevalence drops less  rapidly
   art.intro <- list()
   art.intro["time"] <- 25
-  art.intro["person.art.accept.threshold.dist.fixed.value"] <- inputvector[4] ######### 0.5
+  art.intro["person.art.accept.threshold.dist.fixed.value"] <- 0.5 # inputvector[4] ######### 0.5
   art.intro["diagnosis.baseline"] <- 0#100
   art.intro["monitoring.cd4.threshold"] <- 100 # 1200
   #art.intro["monitoring.interval.piecewise.cd4s"] <- "0,1300"
@@ -600,21 +667,21 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   # Gradual increase in CD4 threshold. in 2007:200. in 2010:350. in 2013:500
 
   art.intro2 <- list()
-  art.intro2["time"] <- 25 + inputvector[5] ######### 30
+  art.intro2["time"] <- 25 + 5 # inputvector[5] ######### 30
   art.intro2["monitoring.cd4.threshold"] <- 200
 
   art.intro3 <- list()
-  art.intro3["time"] <- inputvector[4] + inputvector[5] + inputvector[6] ########### 33
+  art.intro3["time"] <- 33 # inputvector[4] + inputvector[5] + inputvector[6] ########### 33
   art.intro3["monitoring.cd4.threshold"] <- 350
 
   art.intro4 <- list()
-  art.intro4["time"] <- inputvector[4] + inputvector[5] + inputvector[6] + inputvector[7] ########### 36
+  art.intro4["time"] <- 3 # inputvector[4] + inputvector[5] + inputvector[6] + inputvector[7] ########### 36
   art.intro4["monitoring.cd4.threshold"] <- 500
 
   art.intro5 <- list()
   art.intro5["time"] <- 38
   art.intro5["monitoring.cd4.threshold"] <- 5000 # This is equivalent to immediate access
-  art.intro5["person.art.accept.threshold.dist.fixed.value"] <- inputvector[8] ########### 0.75
+  art.intro5["person.art.accept.threshold.dist.fixed.value"] <- 0.5 # inputvector[8] ########### 0.75
 
   # tasp.indicator <- inputvector[9] # 1 if the scenario is TasP, 0 if the scenario is current status
   
@@ -634,22 +701,61 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   agemix.model <- pattern.modeller(dataframe = agemix.df,
                                    agegroup = c(15, 50),
                                    timepoint = datalist.agemix$itable$population.simtime[1],
-                                   timewindow = 3)
+                                   timewindow = 1)#3)
 
-  men.lme <- tryCatch(agemixing.lme.fitter(data = dplyr::filter(agemix.model[[1]], Gender =="male")),
+  # men.lme <- tryCatch(agemixing.lme.fitter(data = dplyr::filter(agemix.model[[1]], Gender =="male")),
+  #                     error = agemixing.lme.errFunction) # Returns an empty list if the lme model can't be fitted
+  
+    men.lmer <- tryCatch(ampmodel(data = dplyr::filter(agemix.model[[1]], Gender =="male")),
                       error = agemixing.lme.errFunction) # Returns an empty list if the lme model can't be fitted
 
   bignumber <- NA # let's try if NA works (instead of 9999 for example)
 
-  AAD <- ifelse(length(men.lme) > 0, mean(dplyr::filter(agemix.model[[1]], Gender =="male")$AgeGap), bignumber)
-  SDAD <- ifelse(length(men.lme) > 0, sd(dplyr::filter(agemix.model[[1]], Gender =="male")$AgeGap), bignumber)
-  powerm <- ifelse(length(men.lme) > 0, as.numeric(attributes(men.lme$apVar)$Pars["varStruct.power"]), bignumber)
-  slopem <- ifelse(length(men.lme) > 0, summary(men.lme)$tTable[2, 1], bignumber)
-  WVAD.base <- ifelse(length(men.lme) > 0, men.lme$sigma^2, bignumber)
-  BVAD <- ifelse(length(men.lme) > 0, getVarCov(men.lme)[1,1], bignumber)
+  AAD.male <- ifelse(length(men.lmer) > 0, mean(dplyr::filter(agemix.model[[1]], Gender =="male")$AgeGap), bignumber)
+  SDAD.male <- ifelse(length(men.lmer) > 0, sd(dplyr::filter(agemix.model[[1]], Gender =="male")$AgeGap), bignumber)
+  #powerm <- ifelse(length(men.lme) > 0, as.numeric(attributes(men.lme$apVar)$Pars["varStruct.power"]), bignumber)
+  slope.male <- ifelse(length(men.lmer) > 0, summary(men.lmer)$coefficients[2, 1], bignumber) #summary(men.lmer)$tTable[2, 1], bignumber)
+  WSD.male <- ifelse(length(men.lmer) > 0, summary(men.lmer)$sigma, bignumber) #WVAD.base <- ifelse(length(men.lme) > 0, men.lme$sigma^2, bignumber)
+  
+  BSD.male <- bvar(men.lmer) # Bad name for the function because it actually extracts between subject standard deviation # BVAD <- ifelse(length(men.lmer) > 0, getVarCov(men.lme)[1,1], bignumber)
+  
+  intercept.male <- ifelse(length(men.lmer) > 0, summary(men.lmer)$coefficients[1,1] - 15, bignumber) 
 
   #agegap.mean <- mean(datalist.agemix$rtable$AgeGap)
   #agegap.sd <- sd(datalist.agemix$rtable$AgeGap)
+  
+  
+  ###
+  # Now we fit the negative binomial distribution
+  ###
+  degrees.df <- degree.df.maker(dataframe.df = agemix.df,
+                                agegroup = c(18, 50),
+                                hivstatus = 2,
+                                survey.time = datalist.agemix$itable$population.simtime[1],
+                                window.width = 1,
+                                gender.degree = "male",
+                                only.new = TRUE)
+  
+  
+   # If we want to know % of men who had 0 partners in the past 12 months,
+  # We need to compare nrow(degree.df) with the number of 18-50 year old men #HIV negative women
+  # that were alive at the time of the survey
+  allsurveymen <- dplyr::filter(datalist.agemix$ptable,
+                Gender == 1, # Male
+                TOD > datalist.agemix$itable$population.simtime[1], # Still alive at the time of the survey
+                TOB <= datalist.agemix$itable$population.simtime[1] - 18, # Not younger than 18 at the time of the survey
+                TOB > datalist.agemix$itable$population.simtime[1] - 50)#, # Not older than 50 at the time of the survey
+                #InfectTime > datalist.agemix$itable$population.simtime[1]) # HIV negative at the time of the survey
+  
+  # Creating the vector of degrees
+  degree.vector <- c(rep(0, times = (nrow(allsurveymen) - nrow(degrees.df))), degrees.df$Degree)
+  degree.vector <- rnbinom(n = 100, size =1.28, mu = 0.66) # PLACEHOLDER FOR NOW
+  # Fitting the negative binomial distribution to this vector
+  fit.negbin <- fitdist(degree.vector, "nbinom")
+  shape.nb <- as.numeric(fit.negbin$estimate[1])
+  scale.nb <- as.numeric(fit.negbin$estimate[2]) #(theta = p/(1-p))
+  
+
   hivprev.15.50 <- prevalence.calculator(datalist = datalist.agemix,
                         agegroup = c(15, 50),
                         timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[3]
