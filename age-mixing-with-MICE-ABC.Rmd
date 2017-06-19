@@ -13,8 +13,10 @@ output: html_notebook
 Important question: should we only have “general population” targets, or also hiv-status and gender specific targets? For now, only general population.
  
 #### Sexual activity:
-5. Degree distribution of new sex partners in the last year.
-7. (if GAMM or other multi-parameter model): Extract age effect: Fitting NB distribution to data on number of new relationships in last year, with age covariate.
+Degree distribution of new sex partners in the last year:
+5. shape parameter (r) of the negative binomial distribution = 1.29
+6. scale parameter (theta) of the negative binomial distribution = 0.66 (theta = p/(1-p))
+(For now we are not taking age effect into account, but if we were, e.g. via GAMM or other multi-parameter model): Extract age effect: Fitting NB distribution to data on number of new relationships in last year, with age covariate.
 ```{r nb.params}
 library(dplyr)
 library(MASS)
@@ -22,6 +24,9 @@ library(splines)
 library(boot)
 library(haven)
 library(ggplot2)
+library(fitdistrplus)
+library(lmtest)
+
 
 relations.data.path <- "/Users/delvaw/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
 
@@ -50,6 +55,8 @@ data.filtered <- dplyr::filter(data.needed,
 data.filtered$totalpartnerslstyr <- data.filtered$cpcount +
   data.filtered$ompcount # Total NEW relationships formed in the last year
 
+data.filtered$age0 <- data.filtered$age - min(data.filtered$age)
+
 # We create 4 subsets, one for each race-gender stratum
 md.wideBM <- dplyr::filter(data.filtered,
                            race == 2,
@@ -66,59 +73,90 @@ md.wideBW <- dplyr::filter(data.filtered,
 intercept.Bm <- glm.nb(totalpartnerslstyr~1,
                        data = md.wideBM,
                        control = glm.control(maxit = 100000, trace = 3),
-                       init.theta = 0.5)
-summary(intercept.Bm)
-shape.nb <- as.numeric(intercept.Bm$coefficients) #(r)
+                       init.theta = 1)
+summary(intercept.Bm) # intercept exp(0.25), theta = 0.65
+shape.nb <- exp(as.numeric(intercept.Bm$coefficients)) #(r)
 scale.nb <- as.numeric(intercept.Bm$theta) #(theta = p/(1-p))
+
+# Or alternatively we can fit the negative binomial like this:
+fit.negbin <- fitdist(as.numeric(md.wideBM$totalpartnerslstyr), "nbinom")
+
+fit.pois <- fitdist(as.numeric(md.wideBM$totalpartnerslstyr), "pois")
+r.pois <- rpois(n = 1000000, lambda = as.numeric(fit.pois$estimate))
+
+
+# A negative binomial distribution is the result of gamma-distributed Poisson processes.
+r.lambdas <- rgamma(n = 1000000, shape = shape.nb, scale = scale.nb)
+r.negbinom <- rpois(n = length(r.lambdas), lambda = r.lambdas)
 random.nb <- rnbinom(n = 10000, size = shape.nb, mu = shape.nb * scale.nb)
-mean(random.nb)
 
 hist(md.wideBM$totalpartnerslstyr)
+hist(r.negbinom)
+hist(random.nb)
 mean(md.wideBM$totalpartnerslstyr)
+mean(r.negbinom)
+mean(random.nb)
 
-finalBm<-glm.nb(totalpartnerslstyr~ns(age, 3),
+round(prop.table(table(as.numeric(md.wideBM$totalpartnerslstyr))), 2)
+round(prop.table(table(random.nb)), 2)
+round(prop.table(table(r.negbinom)), 2)
+round(prop.table(table(r.pois)), 2)
+
+
+finalBm <- glm.nb(totalpartnerslstyr~ns(age0, 3),
                 data=md.wideBM,
                 control=glm.control(maxit=100000, trace = 3),
                 init.theta=0.5)
 
 summary(finalBm)
 
+lrtest(intercept.Bm, finalBm)
+
 ###############################################################################
 # Made up data set to predict the expected number of sexual partners per age
 ##############################################################################
-madeforBM<-data.frame(age = 15:49, gender = "man", race = "African")
+madeforBM <- data.frame(age0 = 0:34, gender = "man", race = "African") # ~ 15 to 49 year old men
 
 madeforBM$totalpartnerslstyr <- NA
 ########################################################################################
-tryBM<-predict(finalBm,newdata=madeforBM,type="response")
-madeforBM$try<-tryBM;
+tryBM <- predict(finalBm, newdata=madeforBM, type="link", se.fit = TRUE)
+madeforBM$try <- exp(tryBM$fit);
+madeforBM$try.low <- exp(tryBM$fit - 1.96 * tryBM$se.fit);
+madeforBM$try.high <- exp(tryBM$fit + 1.96 * tryBM$se.fit);
+
 
 ### Final step: plotting the results
-plot(seq(15, 49), tryBM, type="l", col="navyblue",main="Black men",xlab="Age",ylab="Partnerslastyear")
-
-
-
-wds.general <- 3
-bsd.general <- 1.5
-slope.general <- 0.7
-intercept.general <- -1 # average age of partners of 15 year-old boys is 16
-
-
+plot(seq(15, 49), madeforBM$try, type="l", col="navyblue",main="Black men",xlab="Age",ylab="Partnerslastyear", ylim = c(0, 4))
+points(seq(15, 49), madeforBM$try.low, col="navyblue")
+points(seq(15, 49), madeforBM$try.high, col="navyblue")
 
 ```
 
-10. Concurrency: see Delva-Meng-Beauclair paper
+7. Concurrency: Beauclair JIAS 2015:Point-prevalence of concurrent partnerships 6 months before survey was 13.4% among black men
 
-11. Epidemic trajectory: prevalence by age and gender, by age-groups as per Beauclair 2017 PLoS ONE
- 
+#### Epidemic trajectory
+HIV prevalence by age and gender, by age-groups as per Beauclair 2017 (journal unknown yet)
+8. HIV prevalence in women < 25 yo: 0.2
+9. HIV prevalence in men < 25 yo: 0.1
+10. HIV prevalence in women 25 <= x < 35: 0.42
+11. HIV prevalence in men 25 <= x < 35: 0.17
+12. HIV prevalence in women 35 <= x < 45: 0.37
+13. HIV prevalence in men 35 <= x < 45: 0.24
 
 ```{r define.summary.statistics}
-wds.general <- 3
+wsd.general <- 3
 bsd.general <- 1.5
 slope.general <- 0.7
 intercept.general <- -1 # average age of partners of 15 year-old boys is 16
-
-
+shape.nb <- 1.29
+scale.nb <- 0.66
+pp.cp.6months.men <- 0.134
+hiv.prev.lt25.women <- 0.2
+hiv.prev.lt25.men <- 0.1
+hiv.prev.25.34.women <- 0.42
+hiv.prev.25.34.men <- 0.17
+hiv.prev.35.44.women <- 0.37
+hiv.prev.35.44.men <- 0.24
 
 ```
 
