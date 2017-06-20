@@ -180,6 +180,7 @@ library(tidyr)
 library(nlme)
 library(lme4)
 library(boot)
+library(data.table)
 
 
 # Let's create a colour palette that is colourblind-friendly
@@ -554,6 +555,36 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
 
   
   
+  
+  
+  concurr.pointprev.calculator <- function(datalist,
+                               timepoint = datalist$itable$population.simtime[1] - 0.5){ #DTP = datalist$ptable, DTE = datalist$etable, cfg = configfile){
+  #DTP <- datalist$ptable
+  #DTL <- datalist$ltable
+  output <- data.table()
+  DTalive.infected <- alive.infected(datalist = datalist,
+                                       timepoint = timepoint, site = "All") # First we only take the data of people who were alive at time_i
+  agemix.df <- agemix.df.maker(datalist)
+  degrees.df <- degree.df.maker(dataframe.df = agemix.df,
+                                agegroup = c(15, 50),
+                                hivstatus = 2,
+                                survey.time = timepoint,
+                                window.width = 0,
+                                gender.degree = "male",
+                                only.new = FALSE)
+  
+  number.people.with.cps <- sum(degrees.df$Degree > 1)
+  popsize <- nrow(DTalive.infected)
+  concurr.pointprevalence <- number.people.with.cps / popsize
+  #output <- rbind(output, concurrdata)
+  #outputlist <- list(output=output)
+  #return(outputlist)
+  return(concurr.pointprevalence)
+}
+
+
+  
+  
   cd4.atARTinit <- function(datalist = datalist,
                           agegroup = c(15, 30),
                           timewindow = c(15, 30),
@@ -755,7 +786,18 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   shape.nb <- as.numeric(fit.negbin$estimate[1])
   scale.nb <- as.numeric(fit.negbin$estimate[2]) #(theta = p/(1-p))
   
-
+  # Concurrency point prevalence 6 months before a survey, among men
+  pp.cp.6months.men <- concurr.pointprev.calculator(datalist = datalist.agemix,
+                               timepoint = datalist$itable$population.simtime[1] - 0.5)
+  
+hiv.prev.lt25.women <- 0.2
+hiv.prev.lt25.men <- 0.1
+hiv.prev.25.34.women <- 0.42
+hiv.prev.25.34.men <- 0.17
+hiv.prev.35.44.women <- 0.37
+hiv.prev.35.44.men <- 0.24
+  
+  
   hivprev.15.50 <- prevalence.calculator(datalist = datalist.agemix,
                         agegroup = c(15, 50),
                         timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[3]
