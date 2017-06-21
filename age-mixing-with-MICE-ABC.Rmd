@@ -28,7 +28,7 @@ library(fitdistrplus)
 library(lmtest)
 
 
-relations.data.path <- "/Users/delvaw/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
+relations.data.path <- "/Users/wimdelva/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
 
 data.relations <- read_dta(file = relations.data.path)
 #names(data.relations)
@@ -633,7 +633,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
                                    hivtransmission.param.b = -90,
                                    hivtransmission.param.c = 0.5,
                                    hivtransmission.param.f1 = log(inputvector[2]) , #log(2),
-                                   hivtransmission.param.f2 = log((exp(log(inputvector[2]) * 0.5))^2 / log(inputvector[2])) / 5, #log(log(1.4) / log(2)) / 5,
+                                   hivtransmission.param.f2 = log(log(sqrt(inputvector[2])) / log(inputvector[2])) / 5, #log(log(1.4) / log(2)) / 5,
                                    formation.hazard.agegapry.gap_factor_man_age = -0.01, #-0.01472653928518528523251061,
                                    formation.hazard.agegapry.gap_factor_woman_age = -0.01, #-0.0726539285185285232510561,
                                    formation.hazard.agegapry.meanage = -0.025,
@@ -671,14 +671,14 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   cfg.list["mortality.aids.survtime.C"] <- 65
   cfg.list["mortality.aids.survtime.k"] <- -0.2
   #cfg.list["monitoring.cd4.threshold"] <- 0
-  cfg.list["person.agegap.man.dist.normal.mu"] <- inputvector[4] # 0
-  cfg.list["person.agegap.woman.dist.normal.mu"] <- inputvector[4] # 0
-  cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[5] ######### 3
-  cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[5] ######### 3
-  cfg.list["person.person.eagerness.man.dist.gamma.a"] <- inputvector[6] ######### 3
-  cfg.list["person.person.eagerness.woman.dist.gamma.a"] <- inputvector[7] ######### 3
-  cfg.list["person.person.eagerness.man.dist.gamma.b"] <- inputvector[8] ######### 3
-  cfg.list["person.person.eagerness.woman.dist.gamma.b"] <- inputvector[9] ######### 3
+  #cfg.list["person.agegap.man.dist.normal.mu"] <- inputvector[4] # 0
+  #cfg.list["person.agegap.woman.dist.normal.mu"] <- inputvector[4] # 0
+  #cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[5] ######### 3
+  #cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[5] ######### 3
+  #cfg.list["person.eagerness.man.dist.gamma.a"] <- inputvector[6] ######### 0.23
+  #cfg.list["person.eagerness.woman.dist.gamma.a"] <- inputvector[7] ######### 0.23
+  #cfg.list["person.eagerness.man.dist.gamma.b"] <- inputvector[8] ######### 45
+  #cfg.list["person.eagerness.woman.dist.gamma.b"] <- inputvector[9] ######### 45
   
 
   cfg.list["person.survtime.logoffset.dist.type"] <- "normal"
@@ -691,13 +691,13 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   #cfg["person.agegap.woman.dist.fixed.value"] <- -2 # inputvector[2]
   cfg["formation.hazard.agegapry.gap_factor_man_exp"] <- inputvector[10] ######### -0.5
   cfg["formation.hazard.agegapry.gap_factor_woman_exp"] <- inputvector[10] ######### -0.5
-  cfg["formation.hazard.agegapry.baseline"] <- inputvector[11]
+  ####cfg["formation.hazard.agegapry.baseline"] <- inputvector[11]
   
-  cfg["formation.hazard.agegapry.numrel_man"] <- inputvector[12]
-  cfg["formation.hazard.agegapry.numrel_woman"] <- inputvector[13]
+  #####cfg["formation.hazard.agegapry.numrel_man"] <- inputvector[12]
+  #########cfg["formation.hazard.agegapry.numrel_woman"] <- inputvector[13]
   # inputvector[14] is conception.alpha.base (higher up)
-  cfg["dissolution.alpha_0"] <- input.vector[15]
-  cfg["dissolution.alpha_4"] <- input.vector[16]
+  #############cfg["dissolution.alpha_0"] <- inputvector[15]
+  ###################################### cfg["dissolution.alpha_4"] <- inputvector[16]
 
   # Let's introduce ART, and evaluate whether the HIV prevalence drops less  rapidly
   art.intro <- list()
@@ -900,27 +900,28 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
 ```
 
 #### Input parameters
-1. hivtransmission.param.f1
-2. formation.hazard.agegapry.gap_agescale_man = formation.hazard.agegapry.gap_agescale_woman
-3. person.agegap.man.dist.normal.mu = person.agegap.woman.dist.normal.mu
-4. person.agegap.man.dist.normal.sigma = person.agegap.woman.dist.normal.sigma
-5. person.person.eagerness.man.dist.gamma.a
-6. person.person.eagerness.woman.dist.gamma.a
-7. person.person.eagerness.man.dist.gamma.b
-8. person.person.eagerness.woman.dist.gamma.b
-9. formation.hazard.agegapry.gap_factor_man_exp = formation.hazard.agegapry.gap_factor_woman_exp
-10. formation.hazard.agegapry.baseline
-11. formation.hazard.agegapry.numrel_man
-12. formation.hazard.agegapry.numrel_woman
-13. conception.alpha_base
-14. dissolution.alpha_0
-15. dissolution.alpha_4
+1. hivtransmission.param.f1 (2)
+2. formation.hazard.agegapry.gap_agescale_man = formation.hazard.agegapry.gap_agescale_woman (0.25)
+3. person.agegap.man.dist.normal.mu = person.agegap.woman.dist.normal.mu (0)
+4. person.agegap.man.dist.normal.sigma = person.agegap.woman.dist.normal.sigma (3)
+5. person.person.eagerness.man.dist.gamma.a (0.23)
+6. person.person.eagerness.woman.dist.gamma.a (0.23)
+7. person.person.eagerness.man.dist.gamma.b (45)
+8. person.person.eagerness.woman.dist.gamma.b (45)
+9. formation.hazard.agegapry.gap_factor_man_exp = formation.hazard.agegapry.gap_factor_woman_exp (-0.5)
+10. formation.hazard.agegapry.baseline (0)
+11. formation.hazard.agegapry.numrel_man (-0.5)
+12. formation.hazard.agegapry.numrel_woman (-0.5)
+13. conception.alpha_base (-2.5)
+14. dissolution.alpha_0 (-0.52)
+15. dissolution.alpha_4 (-0.05)
+  
   
 
 ```{r define.parallel.function.evaluator, echo = FALSE}
 # A function to run Simpact in parallel
 simpact.parallel <- function(model = simpact.wrapper,
-                             actual.input.matrix = matrix(rep(c(-6, -6), 16), nrow = 16),
+                             actual.input.matrix = matrix(rep(c(1:15), 16), nrow = 16),
                              #nb_simul = 16,
                              seed_count = 0,
                              n_cluster = 8){
@@ -953,10 +954,32 @@ simpact.parallel <- function(model = simpact.wrapper,
 
 Let's create the "truth" with the master model.
 ```{r truth, cache = TRUE, echo = FALSE, message = FALSE, warning = FALSE, results = "hide", eval = FALSE}
-reps <- 10
-design.matrix.control <- matrix(rep(c(3, -0.5, 0.5, 5, 3, 3, 0.75, 0), reps), nrow = reps, byrow = TRUE)
+reps <- 1
+
+target.vector.master <- c(2, 0.25, 0, 3, 0.23, 0.23, 45, 45, -0.5, 0, -0.5, -0.5, -2.5, -0.52, -0.05)
+test.inputvectorplusseed <- c(1, target.vector.master)
+# 1. hivtransmission.param.f1 (2)
+# 2. formation.hazard.agegapry.gap_agescale_man = formation.hazard.agegapry.gap_agescale_woman (0.25)
+# 3. person.agegap.man.dist.normal.mu = person.agegap.woman.dist.normal.mu (0)
+# 4. person.agegap.man.dist.normal.sigma = person.agegap.woman.dist.normal.sigma (3)
+# 5. person.person.eagerness.man.dist.gamma.a (0.23)
+# 6. person.person.eagerness.woman.dist.gamma.a (0.23)
+# 7. person.person.eagerness.man.dist.gamma.b (45)
+# 8. person.person.eagerness.woman.dist.gamma.b (45)
+# 9. formation.hazard.agegapry.gap_factor_man_exp = formation.hazard.agegapry.gap_factor_woman_exp (-0.5)
+# 10. formation.hazard.agegapry.baseline (0)
+# 11. formation.hazard.agegapry.numrel_man (-0.5)
+# 12. formation.hazard.agegapry.numrel_woman (-0.5)
+# 13. conception.alpha_base (-2.5)
+# 14. dissolution.alpha_0 (-0.52)
+# 15. dissolution.alpha_4 (-0.05))
+
+simpact.wrapper(test.inputvectorplusseed)
+
+design.matrix.control <- matrix(rep(target.vector.master, reps), nrow = reps, byrow = TRUE)
+
 design.matrix.interv <- matrix(rep(c(3, -0.5, 0.5, 5, 3, 3, 0.75, 1), reps), nrow = reps, byrow = TRUE)
-sumsmstats.control.df <- simpact.parallel(model = simpact.wrapper.master,
+sumsmstats.control.df <- simpact.parallel(model = simpact.wrapper,
                                   actual.input.matrix = design.matrix.control,
                                   seed_count = 0,
                                   n_cluster = 8)
