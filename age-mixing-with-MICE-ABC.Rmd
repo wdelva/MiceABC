@@ -641,12 +641,13 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
                                    formation.hazard.agegapry.gap_factor_woman_const = 0,
                                    formation.hazard.agegapry.gap_factor_man_exp = -1, #-6,#-1.5,
                                    formation.hazard.agegapry.gap_factor_woman_exp = -1, #-6,#-1.5,
-                                   formation.hazard.agegapry.gap_agescale_man = 0.25,
-                                   formation.hazard.agegapry.gap_agescale_woman = 0.25,#-0.30000007,#-0.03,
+                                   formation.hazard.agegapry.gap_agescale_man = inputvector[3], # 0.25,
+                                   formation.hazard.agegapry.gap_agescale_woman = inputvector[3], # 0.25,#-0.30000007,#-0.03,
                                    debut.debutage = 15,
-                                   conception.alpha_base = -2.5#,
+                                   conception.alpha_base = inputvector[14]#-2.5#,
                                    #person.art.accept.threshold.dist.fixed.value = 0
   )
+  
   # cfg.list["diagnosis.baseline"] <- 100
   # cfg.list["diagnosis.HSV2factor"] <- 0
   # cfg.list["diagnosis.agefactor"] <- 0
@@ -670,10 +671,15 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   cfg.list["mortality.aids.survtime.C"] <- 65
   cfg.list["mortality.aids.survtime.k"] <- -0.2
   #cfg.list["monitoring.cd4.threshold"] <- 0
-  cfg.list["person.agegap.man.dist.normal.mu"] <- inputvector[3] # 0
-  cfg.list["person.agegap.woman.dist.normal.mu"] <- inputvector[3] # 0
-  cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[4] ######### 3
-  cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[4] ######### 3
+  cfg.list["person.agegap.man.dist.normal.mu"] <- inputvector[4] # 0
+  cfg.list["person.agegap.woman.dist.normal.mu"] <- inputvector[4] # 0
+  cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[5] ######### 3
+  cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[5] ######### 3
+  cfg.list["person.person.eagerness.man.dist.gamma.a"] <- inputvector[6] ######### 3
+  cfg.list["person.person.eagerness.woman.dist.gamma.a"] <- inputvector[7] ######### 3
+  cfg.list["person.person.eagerness.man.dist.gamma.b"] <- inputvector[8] ######### 3
+  cfg.list["person.person.eagerness.woman.dist.gamma.b"] <- inputvector[9] ######### 3
+  
 
   cfg.list["person.survtime.logoffset.dist.type"] <- "normal"
   cfg.list["person.survtime.logoffset.dist.normal.mu"] <- 0
@@ -683,8 +689,12 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   seedid <- inputvector[1]
   #cfg["person.agegap.man.dist.fixed.value"] <- -2 # inputvector[2]
   #cfg["person.agegap.woman.dist.fixed.value"] <- -2 # inputvector[2]
-  cfg["formation.hazard.agegapry.gap_factor_man_exp"] <- inputvector[5] ######### -0.5
-  cfg["formation.hazard.agegapry.gap_factor_woman_exp"] <- inputvector[5] ######### -0.5
+  cfg["formation.hazard.agegapry.gap_factor_man_exp"] <- inputvector[10] ######### -0.5
+  cfg["formation.hazard.agegapry.gap_factor_woman_exp"] <- inputvector[10] ######### -0.5
+  cfg["formation.hazard.agegapry.baseline"] <- inputvector[11]
+  
+  cfg["formation.hazard.agegapry.numrel_man"] <- inputvector[12]
+  cfg["formation.hazard.agegapry.numrel_woman"] <- inputvector[13]
 
   # Let's introduce ART, and evaluate whether the HIV prevalence drops less  rapidly
   art.intro <- list()
@@ -783,24 +793,34 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   degree.vector <- rnbinom(n = 100, size =1.28, mu = 0.66) # PLACEHOLDER FOR NOW
   # Fitting the negative binomial distribution to this vector
   fit.negbin <- fitdist(degree.vector, "nbinom")
-  shape.nb <- as.numeric(fit.negbin$estimate[1])
-  scale.nb <- as.numeric(fit.negbin$estimate[2]) #(theta = p/(1-p))
+  shape.nb.male <- as.numeric(fit.negbin$estimate[1])
+  scale.nb.male <- as.numeric(fit.negbin$estimate[2]) #(theta = p/(1-p))
   
   # Concurrency point prevalence 6 months before a survey, among men
-  pp.cp.6months.men <- concurr.pointprev.calculator(datalist = datalist.agemix,
+  pp.cp.6months.male <- concurr.pointprev.calculator(datalist = datalist.agemix,
                                timepoint = datalist$itable$population.simtime[1] - 0.5)
   
-hiv.prev.lt25.women <- 0.2
-hiv.prev.lt25.men <- 0.1
-hiv.prev.25.34.women <- 0.42
-hiv.prev.25.34.men <- 0.17
-hiv.prev.35.44.women <- 0.37
-hiv.prev.35.44.men <- 0.24
+  
+  hiv.prev.lt25.women <- prevalence.calculator(datalist = datalist.agemix,
+                        agegroup = c(15, 25),
+                        timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[2]
+  hiv.prev.lt25.men <- prevalence.calculator(datalist = datalist.agemix,
+                        agegroup = c(15, 25),
+                        timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[1]
+  hiv.prev.25.34.women <- prevalence.calculator(datalist = datalist.agemix,
+                        agegroup = c(25, 35),
+                        timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[2]
+  hiv.prev.25.34.men <- prevalence.calculator(datalist = datalist.agemix,
+                        agegroup = c(25, 35),
+                        timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[1]
+  hiv.prev.35.44.women <- prevalence.calculator(datalist = datalist.agemix,
+                        agegroup = c(35, 45),
+                        timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[2]
+  hiv.prev.35.44.men <- prevalence.calculator(datalist = datalist.agemix,
+                        agegroup = c(35, 45),
+                        timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[1]
   
   
-  hivprev.15.50 <- prevalence.calculator(datalist = datalist.agemix,
-                        agegroup = c(15, 50),
-                        timepoint = datalist.agemix$itable$population.simtime[1])$pointprevalence[3]
   # ART coverage vector
   ART.cov.eval.timepoints <- seq(from = intervention[[1]]$time,
                                           to = datalist.agemix$itable$population.simtime[1])
@@ -855,13 +875,22 @@ hiv.prev.35.44.men <- 0.24
   growthrate <- pop.growth.calculator(datalist = datalist.agemix,
                         timewindow = c(0, datalist.agemix$itable$population.simtime[1]))
 
-  outputvector <- c(AAD, SDAD, powerm, slopem, WVAD.base, BVAD, hivprev.15.50, growthrate,
-                    exp(ART.cov.vector),
-                    exp(cd4.lt100.vector/cd4.any.vector),
-                    exp(cd4.100.200.vector/cd4.any.vector),
-                    exp(cd4.200.350.vector/cd4.any.vector),
-                    exp(cd4.350.500.vector/cd4.any.vector),
-                    exp(cd4.500plus.vector/cd4.any.vector))#,
+  outputvector <- c(AAD.male, SDAD.male, slope.male, WSD.male, BSD.male, intercept.male,
+                    shape.nb.male, scale.nb.male,
+                    pp.cp.6months.male,
+                    hiv.prev.lt25.women,
+                    hiv.prev.lt25.men,
+                    hiv.prev.25.34.women,
+                    hiv.prev.25.34.men,
+                    hiv.prev.35.44.women,
+                    hiv.prev.35.44.men, 
+                    exp(growthrate))#,
+                    # exp(ART.cov.vector),
+                    # exp(cd4.lt100.vector/cd4.any.vector),
+                    # exp(cd4.100.200.vector/cd4.any.vector),
+                    # exp(cd4.200.350.vector/cd4.any.vector),
+                    # exp(cd4.350.500.vector/cd4.any.vector),
+                    # exp(cd4.500plus.vector/cd4.any.vector))#,
                     #incid.final)
   return(outputvector)
 }
