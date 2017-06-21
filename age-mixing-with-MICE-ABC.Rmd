@@ -28,7 +28,7 @@ library(fitdistrplus)
 library(lmtest)
 
 
-relations.data.path <- "/Users/wimdelva/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
+relations.data.path <- "/Users/delvaw/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
 
 data.relations <- read_dta(file = relations.data.path)
 #names(data.relations)
@@ -127,8 +127,8 @@ madeforBM$try.high <- exp(tryBM$fit + 1.96 * tryBM$se.fit);
 
 ### Final step: plotting the results
 plot(seq(15, 49), madeforBM$try, type="l", col="navyblue",main="Black men",xlab="Age",ylab="Partnerslastyear", ylim = c(0, 4))
-points(seq(15, 49), madeforBM$try.low, col="navyblue")
-points(seq(15, 49), madeforBM$try.high, col="navyblue")
+#points(seq(15, 49), madeforBM$try.low, col="navyblue")
+#points(seq(15, 49), madeforBM$try.high, col="navyblue")
 
 ```
 
@@ -695,6 +695,9 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   
   cfg["formation.hazard.agegapry.numrel_man"] <- inputvector[12]
   cfg["formation.hazard.agegapry.numrel_woman"] <- inputvector[13]
+  # inputvector[14] is conception.alpha.base (higher up)
+  cfg["dissolution.alpha_0"] <- input.vector[15]
+  cfg["dissolution.alpha_4"] <- input.vector[16]
 
   # Let's introduce ART, and evaluate whether the HIV prevalence drops less  rapidly
   art.intro <- list()
@@ -896,7 +899,23 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
 }
 ```
 
-
+#### Input parameters
+1. hivtransmission.param.f1
+2. formation.hazard.agegapry.gap_agescale_man = formation.hazard.agegapry.gap_agescale_woman
+3. person.agegap.man.dist.normal.mu = person.agegap.woman.dist.normal.mu
+4. person.agegap.man.dist.normal.sigma = person.agegap.woman.dist.normal.sigma
+5. person.person.eagerness.man.dist.gamma.a
+6. person.person.eagerness.woman.dist.gamma.a
+7. person.person.eagerness.man.dist.gamma.b
+8. person.person.eagerness.woman.dist.gamma.b
+9. formation.hazard.agegapry.gap_factor_man_exp = formation.hazard.agegapry.gap_factor_woman_exp
+10. formation.hazard.agegapry.baseline
+11. formation.hazard.agegapry.numrel_man
+12. formation.hazard.agegapry.numrel_woman
+13. conception.alpha_base
+14. dissolution.alpha_0
+15. dissolution.alpha_4
+  
 
 ```{r define.parallel.function.evaluator, echo = FALSE}
 # A function to run Simpact in parallel
