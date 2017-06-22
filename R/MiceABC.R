@@ -30,11 +30,14 @@
 #' @import randtoolbox
 #' @import dplyr
 
-MICE_ABC <- function(targets = target.vector.trainer,
+# lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
+# uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
+
+MICE_ABC <- function(targets = target.vector.master,
                      n.experiments = 16,
-                     lls = c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
-                     uls = c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
-                     probs = c(3, 7), # indicate in the lls and uls vectors, which elements represent probabilities strictly between 0 and 1
+                     lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
+                     uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
+                     # probs = c(3, 7), # indicate in the lls and uls vectors, which elements represent probabilities strictly between 0 and 1
                      model = simpact.wrapper,
                      maxit = 10,
                      maxwaves = 2, # and we can also try 10 to do the same as the 10 waves of Lenormand
