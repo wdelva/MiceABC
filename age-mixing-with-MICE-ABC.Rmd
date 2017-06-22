@@ -467,6 +467,10 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   library(dplyr)
   library(nlme)
   library(lme4)
+  library(fitdistrplus)
+  library(lmtest)
+  library(tidyr)
+  library(data.table)
 
   agemixing.lme.errFunction <- function(e)
   {
@@ -670,15 +674,15 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
 
   cfg.list["mortality.aids.survtime.C"] <- 65
   cfg.list["mortality.aids.survtime.k"] <- -0.2
-  #cfg.list["monitoring.cd4.threshold"] <- 0
-  #cfg.list["person.agegap.man.dist.normal.mu"] <- inputvector[4] # 0
-  #cfg.list["person.agegap.woman.dist.normal.mu"] <- inputvector[4] # 0
-  #cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[5] ######### 3
-  #cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[5] ######### 3
-  #cfg.list["person.eagerness.man.dist.gamma.a"] <- inputvector[6] ######### 0.23
-  #cfg.list["person.eagerness.woman.dist.gamma.a"] <- inputvector[7] ######### 0.23
-  #cfg.list["person.eagerness.man.dist.gamma.b"] <- inputvector[8] ######### 45
-  #cfg.list["person.eagerness.woman.dist.gamma.b"] <- inputvector[9] ######### 45
+  cfg.list["monitoring.cd4.threshold"] <- 0
+  cfg.list["person.agegap.man.dist.normal.mu"] <- inputvector[4] # 0
+  cfg.list["person.agegap.woman.dist.normal.mu"] <- inputvector[4] # 0
+  cfg.list["person.agegap.man.dist.normal.sigma"] <- inputvector[5] ######### 3
+  cfg.list["person.agegap.woman.dist.normal.sigma"] <- inputvector[5] ######### 3
+  cfg.list["person.eagerness.man.dist.gamma.a"] <- inputvector[6] ######### 0.23
+  cfg.list["person.eagerness.woman.dist.gamma.a"] <- inputvector[7] ######### 0.23
+  cfg.list["person.eagerness.man.dist.gamma.b"] <- inputvector[8] ######### 45
+  cfg.list["person.eagerness.woman.dist.gamma.b"] <- inputvector[9] ######### 45
   
 
   cfg.list["person.survtime.logoffset.dist.type"] <- "normal"
@@ -691,13 +695,13 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   #cfg["person.agegap.woman.dist.fixed.value"] <- -2 # inputvector[2]
   cfg["formation.hazard.agegapry.gap_factor_man_exp"] <- inputvector[10] ######### -0.5
   cfg["formation.hazard.agegapry.gap_factor_woman_exp"] <- inputvector[10] ######### -0.5
-  ####cfg["formation.hazard.agegapry.baseline"] <- inputvector[11]
+  cfg["formation.hazard.agegapry.baseline"] <- inputvector[11]
   
-  #####cfg["formation.hazard.agegapry.numrel_man"] <- inputvector[12]
-  #########cfg["formation.hazard.agegapry.numrel_woman"] <- inputvector[13]
+  cfg["formation.hazard.agegapry.numrel_man"] <- inputvector[12]
+  cfg["formation.hazard.agegapry.numrel_woman"] <- inputvector[13]
   # inputvector[14] is conception.alpha.base (higher up)
-  #############cfg["dissolution.alpha_0"] <- inputvector[15]
-  ###################################### cfg["dissolution.alpha_4"] <- inputvector[16]
+  cfg["dissolution.alpha_0"] <- inputvector[15]
+  cfg["dissolution.alpha_4"] <- inputvector[16]
 
   # Let's introduce ART, and evaluate whether the HIV prevalence drops less  rapidly
   art.intro <- list()
@@ -793,11 +797,24 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   
   # Creating the vector of degrees
   degree.vector <- c(rep(0, times = (nrow(allsurveymen) - nrow(degrees.df))), degrees.df$Degree)
-  degree.vector <- rnbinom(n = 100, size =1.28, mu = 0.66) # PLACEHOLDER FOR NOW
+  meandegree.male <- mean(degree.vector)
+  hist(degree.vector, 10)
+  # degree.vector <- rnbinom(n = 100, size =1.28, mu = 0.66) # PLACEHOLDER FOR NOW
   # Fitting the negative binomial distribution to this vector
   fit.negbin <- fitdist(degree.vector, "nbinom")
-  shape.nb.male <- as.numeric(fit.negbin$estimate[1])
-  scale.nb.male <- as.numeric(fit.negbin$estimate[2]) #(theta = p/(1-p))
+  shape.nb.male <- as.numeric(fit.negbin$estimate[2])
+  scale.nb.male <- as.numeric(fit.negbin$estimate[1]) #(theta = p/(1-p))
+  
+#   degrees.df <- data.frame(degree = degree.vector)
+#   # Model for black men in the last year
+#   nb.fit <- glm.nb(degree~1,
+#                        data = degrees.df,
+#                        control = glm.control(maxit = 100000, trace = 3),
+#                        init.theta = 1)
+# summary(nb.fit) # intercept exp(0.25), theta = 0.65
+# shape.nb <- exp(as.numeric(nb.fit$coefficients)) #(r)
+# scale.nb <- as.numeric(nb.fit$theta) #(theta = p/(1-p))
+  
   
   # Concurrency point prevalence 6 months before a survey, among men
   pp.cp.6months.male <- concurr.pointprev.calculator(datalist = datalist.agemix,
@@ -837,38 +854,38 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
                           timepoint = ART.cov.eval.timepoints[art.cov.index])$sum.cases)
   }
   # Vector of the fraction of people who started their treatment when their CD4count was between specified values
-  cd4.atARTinit.fractions.timepoints <- seq(from = intervention[[1]]$time + 5,
-                                          to = datalist.agemix$itable$population.simtime[1],
-                                          by = 5) #30, 35, 40
-  cd4.any.vector <- cd4.lt100.vector <- cd4.100.200.vector <- cd4.200.350.vector <- cd4.350.500.vector <- cd4.500plus.vector <- rep(NA, length(cd4.atARTinit.fractions.timepoints))
-  for (cd4.index in 1:length(cd4.lt100.vector)){
-    cd4.lt100.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
-                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
-                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
-                                                       CD4atARTstart < 100) %>% select(ID) %>% unique() %>% nrow()
-    cd4.100.200.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
-                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
-                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
-                                                       CD4atARTstart >= 100,
-                                                       CD4atARTstart < 200) %>% select(ID) %>% unique() %>% nrow()
-    cd4.200.350.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
-                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
-                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
-                                                       CD4atARTstart >= 200,
-                                                       CD4atARTstart < 350) %>% select(ID) %>% unique() %>% nrow()
-    cd4.350.500.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
-                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
-                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
-                                                       CD4atARTstart >= 350,
-                                                       CD4atARTstart < 500) %>% select(ID) %>% unique() %>% nrow()
-    cd4.500plus.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
-                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
-                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
-                                                       CD4atARTstart >= 500) %>% select(ID) %>% unique() %>% nrow()
-    cd4.any.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
-                                                       TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
-                                                       TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5)) %>% select(ID) %>% unique() %>% nrow()
-  }
+  # cd4.atARTinit.fractions.timepoints <- seq(from = intervention[[1]]$time + 5,
+  #                                         to = datalist.agemix$itable$population.simtime[1],
+  #                                         by = 5) #30, 35, 40
+  # cd4.any.vector <- cd4.lt100.vector <- cd4.100.200.vector <- cd4.200.350.vector <- cd4.350.500.vector <- cd4.500plus.vector <- rep(NA, length(cd4.atARTinit.fractions.timepoints))
+  # for (cd4.index in 1:length(cd4.lt100.vector)){
+  #   cd4.lt100.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+  #                                                      TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+  #                                                      TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+  #                                                      CD4atARTstart < 100) %>% select(ID) %>% unique() %>% nrow()
+  #   cd4.100.200.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+  #                                                      TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+  #                                                      TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+  #                                                      CD4atARTstart >= 100,
+  #                                                      CD4atARTstart < 200) %>% select(ID) %>% unique() %>% nrow()
+  #   cd4.200.350.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+  #                                                      TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+  #                                                      TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+  #                                                      CD4atARTstart >= 200,
+  #                                                      CD4atARTstart < 350) %>% select(ID) %>% unique() %>% nrow()
+  #   cd4.350.500.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+  #                                                      TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+  #                                                      TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+  #                                                      CD4atARTstart >= 350,
+  #                                                      CD4atARTstart < 500) %>% select(ID) %>% unique() %>% nrow()
+  #   cd4.500plus.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+  #                                                      TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+  #                                                      TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5),
+  #                                                      CD4atARTstart >= 500) %>% select(ID) %>% unique() %>% nrow()
+  #   cd4.any.vector[cd4.index] <- dplyr::filter(datalist.agemix$ttable,
+  #                                                      TStart < cd4.atARTinit.fractions.timepoints[cd4.index],
+  #                                                      TStart >= (cd4.atARTinit.fractions.timepoints[cd4.index] - 5)) %>% select(ID) %>% unique() %>% nrow()
+  # }
   
   # incid.final <- incidence.calculator(datalist = datalist.agemix,
   #                                     agegroup = c(15, 50),
@@ -880,6 +897,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
 
   outputvector <- c(AAD.male, SDAD.male, slope.male, WSD.male, BSD.male, intercept.male,
                     shape.nb.male, scale.nb.male,
+                    meandegree.male,
                     pp.cp.6months.male,
                     hiv.prev.lt25.women,
                     hiv.prev.lt25.men,
@@ -909,12 +927,37 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
 7. person.person.eagerness.man.dist.gamma.b (45)
 8. person.person.eagerness.woman.dist.gamma.b (45)
 9. formation.hazard.agegapry.gap_factor_man_exp = formation.hazard.agegapry.gap_factor_woman_exp (-0.5)
-10. formation.hazard.agegapry.baseline (0)
+10. formation.hazard.agegapry.baseline (2)
 11. formation.hazard.agegapry.numrel_man (-0.5)
 12. formation.hazard.agegapry.numrel_woman (-0.5)
 13. conception.alpha_base (-2.5)
 14. dissolution.alpha_0 (-0.52)
 15. dissolution.alpha_4 (-0.05)
+  
+  
+#### Output statistics (and targets)
+
+1. AAD.male (4)
+2. SDAD.male (4)
+3. slope.male (0.7)
+4. WSD.male (3)
+5. BSD.male (1.5)
+6. intercept.male (-1)
+7. shape.nb.male (1.29)
+8. scale.nb.male (0.66)
+9. meandegree.male (1)
+10. pp.cp.6months.male (0.134)
+11. hiv.prev.lt25.women (0.2)
+12. hiv.prev.lt25.men (0.1)
+13. hiv.prev.25.34.women (0.42)
+14. hiv.prev.25.34.men (0.17)
+15. hiv.prev.35.44.women (0.37)
+16. hiv.prev.35.44.men (0.24)
+17. exp(growthrate)) (1.01)
+  
+  
+  
+  
   
   
 
@@ -954,9 +997,9 @@ simpact.parallel <- function(model = simpact.wrapper,
 
 Let's create the "truth" with the master model.
 ```{r truth, cache = TRUE, echo = FALSE, message = FALSE, warning = FALSE, results = "hide", eval = FALSE}
-reps <- 1
+reps <- 2
 
-target.vector.master <- c(2, 0.25, 0, 3, 0.23, 0.23, 45, 45, -0.5, 0, -0.5, -0.5, -2.5, -0.52, -0.05)
+target.vector.master <- c(1.1, 0.25, 0, 3, 0.23, 0.23, 45, 45, -0.5, 2.8, -0.2, -0.2, -2.5, -0.52, -0.05)
 test.inputvectorplusseed <- c(1, target.vector.master)
 # 1. hivtransmission.param.f1 (2)
 # 2. formation.hazard.agegapry.gap_agescale_man = formation.hazard.agegapry.gap_agescale_woman (0.25)
@@ -975,7 +1018,24 @@ test.inputvectorplusseed <- c(1, target.vector.master)
 # 15. dissolution.alpha_4 (-0.05))
 
 simpact.wrapper(test.inputvectorplusseed)
-
+# 1. AAD.male (4)
+# 2. SDAD.male (4)
+# 3. slope.male (0.7)
+# 4. WSD.male (3)
+# 5. BSD.male (1.5)
+# 6. intercept.male (-1)
+# 7. shape.nb.male (1.29)
+# 8. scale.nb.male (0.66)
+# 9. meandegree.male (1)
+# 10. pp.cp.6months.male (0.134)
+# 11. hiv.prev.lt25.women (0.2)
+# 12. hiv.prev.lt25.men (0.1)
+# 13. hiv.prev.25.34.women (0.42)
+# 14. hiv.prev.25.34.men (0.17)
+# 15. hiv.prev.35.44.women (0.37)
+# 16. hiv.prev.35.44.men (0.24)
+# 17. exp(growthrate)) (1.01)
+  
 design.matrix.control <- matrix(rep(target.vector.master, reps), nrow = reps, byrow = TRUE)
 
 design.matrix.interv <- matrix(rep(c(3, -0.5, 0.5, 5, 3, 3, 0.75, 1), reps), nrow = reps, byrow = TRUE)
@@ -1046,12 +1106,27 @@ mice.impute.myprob <- function (y, ry, x, ...)
 
 ```{r MICE_ABC, cache = TRUE, eval = FALSE}
 ptm <- proc.time()
-# First 2 parameters can be viewed as continuous variables
-# 3rd and 7th must be viewed as constrained between 0 and 1
-MICE_ABC_testoutput <- MICE_ABC(targets = target.vector.trainer,
+
+# 1. hivtransmission.param.f1 (2)
+# 2. formation.hazard.agegapry.gap_agescale_man = formation.hazard.agegapry.gap_agescale_woman (0.25)
+# 3. person.agegap.man.dist.normal.mu = person.agegap.woman.dist.normal.mu (0)
+# 4. person.agegap.man.dist.normal.sigma = person.agegap.woman.dist.normal.sigma (3)
+# 5. person.person.eagerness.man.dist.gamma.a (0.23)
+# 6. person.person.eagerness.woman.dist.gamma.a (0.23)
+# 7. person.person.eagerness.man.dist.gamma.b (45)
+# 8. person.person.eagerness.woman.dist.gamma.b (45)
+# 9. formation.hazard.agegapry.gap_factor_man_exp = formation.hazard.agegapry.gap_factor_woman_exp (-0.5)
+# 10. formation.hazard.agegapry.baseline (0)
+# 11. formation.hazard.agegapry.numrel_man (-0.5)
+# 12. formation.hazard.agegapry.numrel_woman (-0.5)
+# 13. conception.alpha_base (-2.5)
+# 14. dissolution.alpha_0 (-0.52)
+# 15. dissolution.alpha_4 (-0.05))
+
+MICE_ABC_testoutput <- MICE_ABC(targets = target.vector.master, # 15 input parameters in the age-mxing exercise 1.10  0.25  0.00  3.00  0.23  0.23 45.00 45.00 -0.50  2.80 -0.20 -0.20 -2.50 -0.52 -0.05
                                  n.experiments = 128,
-                                 lls = c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
-                                 uls = c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
+                                 lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
+                                 uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
                                  model = simpact.wrapper,
                                  maxit = 20,
                                  maxwaves = 5, # and we can also try 10 to do the same as the 10 waves of Lenormand
