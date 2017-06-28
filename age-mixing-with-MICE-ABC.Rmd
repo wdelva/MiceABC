@@ -27,8 +27,9 @@ library(ggplot2)
 library(fitdistrplus)
 library(lmtest)
 
+root.path <- dirname(getwd())
 
-relations.data.path <- "/Users/wimdelva/Documents/MiceABC/Sex Network Master (participant level) 09.08.2012.dta"
+relations.data.path <- paste0(root.path, "/MiceABC/Sex Network Master (participant level) 09.08.2012.dta")
 
 data.relations <- read_dta(file = relations.data.path)
 #names(data.relations)
@@ -257,7 +258,7 @@ simpact.wrapper.master <- function(inputvector = input.vector){
     return(cd4count.atARTInit)
   }
   
-  destDir <- "/Users/wimdelva/temp"
+  destDir <- paste0(root.path, "/temp")
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
                                    population.simtime = 40,
@@ -622,7 +623,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
     return(cd4count.atARTInit)
   }
   
-  destDir <- "/Users/wimdelva/temp"
+  destDir <- paste0(root.path, "/temp")
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.2, #0.21,#1,
                                    population.simtime = 35, #40,
@@ -1042,6 +1043,8 @@ simpact.wrapper(test.inputvectorplusseed)
 # 15. hiv.prev.35.44.women (0.37)
 # 16. hiv.prev.35.44.men (0.24)
 # 17. exp(growthrate)) (1.01)
+
+targets.empirical <- c(4, 4, 0.7, 3, 1.5, -1, 1.29, 0.66, 1, 0.134, 0.2, 0.1, 0.42, 0.17, 0.37, 0.24, 1.01)
   
 design.matrix.control <- matrix(rep(target.vector.master, reps), nrow = reps, byrow = TRUE)
 
@@ -1064,7 +1067,7 @@ sumsmstats.interv.df <- simpact.parallel(model = simpact.wrapper.master,
 
 
 ```{r loadmastermodeloutput}
-load(file = "/Users/wimdelva/Documents/MiceABC/incidence.rel.reduc.RData")
+load(file = paste0(root.path, "/MiceABC/incidence.rel.reduc.RData"))
 ```
 
 
@@ -1135,13 +1138,13 @@ ptm <- proc.time()
 # 14. dissolution.alpha_0 (-0.52)
 # 15. dissolution.alpha_4 (-0.05))
 
-MICE_ABC_testoutput <- MICE_ABC(targets = target.vector.master, # 15 input parameters in the age-mxing exercise 1.10  0.25  0.00  3.00  0.23  0.23 45.00 45.00 -0.50  2.80 -0.20 -0.20 -2.50 -0.52 -0.05
-                                 n.experiments = 128,
+MICE_ABC_testoutput <- MICE_ABC(targets = targets.empirical, # 17 output statistics c(4, 4, 0.7, 3, 1.5, -1, 1.29, 0.66, 1, 0.134, 0.2, 0.1, 0.42, 0.17, 0.37, 0.24, 1.01)
+                                 n.experiments = 16,
                                  lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
                                  uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
                                  model = simpact.wrapper,
                                  maxit = 20,
-                                 maxwaves = 5, # and we can also try 10 to do the same as the 10 waves of Lenormand
+                                 maxwaves = 2, # and we can also try 10 to do the same as the 10 waves of Lenormand
                                  #reps = 5,
                                  alpha = 0.25,
                                  saturation.crit = 0)
@@ -1150,13 +1153,13 @@ mice.timeused # xxxx seconds
 ```
 
 ```{r save.calibration.results, eval = FALSE}
-save(MICE_ABC_testoutput, file = "/Users/wimdelva/Documents/MiceABC/mice.tasp.RData")
+save(MICE_ABC_testoutput, file = paste0(root.path, "/MiceABC/mice.age-mixing.RData"))
 
 ```
 Now let's explore and visualise the results
 ```{r vis.calib.results}
-load(file = "/Users/wimdelva/Documents/MiceABC/reject.tasp.RData")
-load(file = "/Users/wimdelva/Documents/MiceABC/mice.tasp.RData")
+load(file = paste0(root.path, "/MiceABC/reject.tasp.RData"))
+load(file = paste0(root.path, "/MiceABC/mice.tasp.RData"))
 
 # 1. For rejectabc
 # Calculating squared relative distances and sum thereof for the ABC rejection method
