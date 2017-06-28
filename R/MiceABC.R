@@ -33,7 +33,7 @@
 # lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
 # uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
 
-MICE_ABC <- function(targets = target.vector.master,
+MICE_ABC <- function(targets = targets.empirical,
                      n.experiments = 16,
                      lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
                      uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
@@ -69,7 +69,10 @@ MICE_ABC <- function(targets = target.vector.master,
     fine <- large.enough & small.enough
     fine.flag <- as.logical(rowSums(fine) == ncol(fine))
     experiments <- experiments[fine.flag, ]
-    try(if(nrow(experiments) == 0) stop("no experiments in the range"))
+    #try(if(nrow(experiments) == 0) stop("no experiments in the range"))
+    while (nrow(experiments) > 15){
+
+
     print(c(nrow(experiments), "experiments to be run"), quote = FALSE) # only for local testing. To be deleted after testing is completed
 
     calibration.list$experiments.executed[[wave]] <- nrow(experiments)
@@ -134,7 +137,7 @@ MICE_ABC <- function(targets = target.vector.master,
     # 2b. Writing to list all the input and output of the executed experiments, so that we can plot it later
     calibration.list$sim.results.with.design[[wave]] <- sim.results.with.design.df
 
-    # 10. Calculate fraction of new (1-alpha frac *n.experiments) distances that are below "old" distance threshold
+    # 10. Calculate fraction of new (1-alpha frac *n.experiments) distances that are below "old" distance threshold. NOT CURRENTLY USED BECAUSE saturation.crit = 0.
     below.old.treshold <- sim.results.with.design.df$sum.sq.rel.dist < rel.dist.cutoff
     frac.below.old.threshold <- sum(below.old.treshold %in% TRUE) / round(n.experiments * (1-alpha))
     if(frac.below.old.threshold < saturation.crit) saturation <- 1 # If less than the fraction saturation.crit of the new experiments a closer fit than the previous batch of retained experiments, the loop must be terminated.
@@ -163,44 +166,78 @@ MICE_ABC <- function(targets = target.vector.master,
     names(targets.df) <- y.names
     df.give.to.mice <- full_join(dplyr::select(sim.results.with.design.df.selected,
                                                -contains("sq.rel.dist")), # adding target to training dataset
-                                 targets.df)
+                                 targets.df,
+                                 by = names(targets.df)) # "by" statement added to avoid printing message of the variables were used for joining
 
     ### Before actually giving it to MICE, we need to logit transform the input params that represent probabilities, so that we can treat these variables as continuous variables
     # "probs" shows that it is the 3rd and 7th input variable (not counting the random seed variable)
-    df.give.to.mice[, probs] <- car::logit(df.give.to.mice[, probs])
+    # df.give.to.mice[, probs] <- car::logit(df.give.to.mice[, probs]) # Commented out because none of the input parameters are probabilities for this age-mixing calibration
+    # INSTEAD, we are transforming parameters that are necessarily strictly positive: sigma, gamma.a, gamma.b.
+    # We could also consider a similar transformation for input parameters that we think should be negative (e.g. formation.hazard.agegapry.gap_factor_man_exp) but for now not yet
+    strict.positive.params <- c(4:8)
+    df.give.to.mice[, strict.positive.params] <- log(df.give.to.mice[, strict.positive.params])
 
     # Let's think a bit more carefully about which variables should be allowed as input for which input parameters.
     # IN THE FUTURE THIS COULD BE AUTOMATED WITH VARIABLE SELECTION ALGORITHMS.
     predictorMatrix <- (1 - diag(1, ncol(df.give.to.mice))) # This is the default matrix.
-    # Let's now modify the first 7 rows of this matrix, corresponding to the indicators of predictor variables for the input variables. In brackets the values for the master model.
-    # 1. person.agegap.woman.dist.normal.sigma (3)
-    # 2. formation.hazard.agegapry.gap_factor_man_exp (-0.5)
-    # 3. person.art.accept.threshold.dist.fixed.value (0.25)
-    # 4. time since start of the ART roll-out (at t=25) when CD4 threshold shifted from 100 to 200 (5)
-    # 5. time since 200 threshold when CD4 threshold shifted to 350 (3)
-    # 6. time since 350 threshold when CD4 threshold shifted to 500 (3)
-    # 7. person.art.accept.threshold.dist.fixed.value (updated value) (at t=38) when CD4 threshold was abandoned entirely
+    # Let's now modify the first 15 rows of this matrix, corresponding to the indicators of predictor variables for the input variables. In brackets the values for the master model.
+    # 1. hivtransmission.param.f1 (2)
+    # 2. formation.hazard.agegapry.gap_agescale_man = formation.hazard.agegapry.gap_agescale_woman (0.25)
+    # 3. person.agegap.man.dist.normal.mu = person.agegap.woman.dist.normal.mu (0)
+    # 4. person.agegap.man.dist.normal.sigma = person.agegap.woman.dist.normal.sigma (3)
+    # 5. person.person.eagerness.man.dist.gamma.a (0.23)
+    # 6. person.person.eagerness.woman.dist.gamma.a (0.23)
+    # 7. person.person.eagerness.man.dist.gamma.b (45)
+    # 8. person.person.eagerness.woman.dist.gamma.b (45)
+    # 9. formation.hazard.agegapry.gap_factor_man_exp = formation.hazard.agegapry.gap_factor_woman_exp (-0.5)
+    # 10. formation.hazard.agegapry.baseline (0)
+    # 11. formation.hazard.agegapry.numrel_man (-0.5)
+    # 12. formation.hazard.agegapry.numrel_woman (-0.5)
+    # 13. conception.alpha_base (-2.5)
+    # 14. dissolution.alpha_0 (-0.52)
+    # 15. dissolution.alpha_4 (-0.05))
 
     # And a reminder of the output vector
-    # outputvector <- c(AAD, SDAD, powerm, slopem, WVAD.base, BVAD, hivprev.15.50, growthrate,
-    #                   exp(ART.cov.vector),
-    #                   exp(cd4.lt100.vector/cd4.any.vector),    32:34
-    #                   exp(cd4.100.200.vector/cd4.any.vector),  35:37
-    #                   exp(cd4.200.350.vector/cd4.any.vector),  38:40
-    #                   exp(cd4.350.500.vector/cd4.any.vector),  41:43
-    #                   exp(cd4.500plus.vector/cd4.any.vector))  44:46
+    # 1. AAD.male (4)
+    # 2. SDAD.male (4)
+    # 3. slope.male (0.7)
+    # 4. WSD.male (3)
+    # 5. BSD.male (1.5)
+    # 6. intercept.male (-1)
+    # 7. shape.nb.male (1.29)
+    # 8. scale.nb.male (0.66)
+    # 9. meandegree.male (1)
+    # 10. pp.cp.6months.male (0.134)
+    # 11. hiv.prev.lt25.women (0.2)
+    # 12. hiv.prev.lt25.men (0.1)
+    # 13. hiv.prev.25.34.women (0.42)
+    # 14. hiv.prev.25.34.men (0.17)
+    # 15. hiv.prev.35.44.women (0.37)
+    # 16. hiv.prev.35.44.men (0.24)
+    # 17. exp(growthrate)) (1.01)
+
+    x.offset <- length(x.names)
 
 
-    predictorMatrix[1:7, ] <- 0 # First we "empty" the relevant rows, then we refill them
-    predictorMatrix[1, c(9, 13)] <- 1
-    predictorMatrix[2, c(8, 9, 12, 14, 15)] <- 1
-    predictorMatrix[3, 17:26] <- 1 # The first 10 years after the introduction of ART
-    predictorMatrix[4, c(17:26, 32:37)] <- 1 # We know the shift took place in the 10 years after ART introduction
-    predictorMatrix[5, c(22:31, 35:40)] <- 1
-    predictorMatrix[6, c(24:34, 38:43)] <- 1
-    predictorMatrix[7, c(30, 31, 46)] <- 1 # 30 and 31 are the ART coverage at time 39 and 40 years; 46 is fraction of ART initiations above 500 cd4 cells
+    predictorMatrix[1:length(x.names), ] <- 0 # First we "empty" the relevant rows, then we refill them.
+    # We are currently not allowing input variables to be predicted by other predictor variables. Only via output variables. We could change this at a later stage.
+    predictorMatrix[1, x.offset + 11:12] <- 1 # relative susceptibility in young women is predicted by HIV prevalence in young men and women
+    predictorMatrix[2, x.offset + 3] <- 1 # agescale predicted by slope
+    predictorMatrix[3, x.offset + c(1, 3, 6)] <- 1 # mean of the person-specific age gap preferences is predicted by slope, intercept and AAD
+    predictorMatrix[4, x.offset + c(2, 4, 5)] <- 1 # sd of the person-specific age gap preferences is predicted by SD, WSD, BSD
+    predictorMatrix[5, x.offset + c(7, 8, 10, 14, 17)] <- 1 # man gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    predictorMatrix[6, x.offset + c(7, 8, 10, 13, 17)] <- 1 # woman gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.women, exp(growthrate)
+    predictorMatrix[7, x.offset + c(7, 8, 10, 14, 17)] <- 1 # man gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    predictorMatrix[8, x.offset + c(7, 8, 10, 13, 17)] <- 1 # woman gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    predictorMatrix[9, x.offset + c(2, 4, 5, 7, 8, 15, 16, 17)] <- 1 # formation.hazard.agegapry.gap_factor_x_exp is predicted by population growth, age gap variance, hiv prevalence,
+    predictorMatrix[10, x.offset + c(7, 8, 10, 13, 14, 17)] <- 1 # baseline formation hazard predicted by HIV prevalence, cp, degree distrib. HIV prevalence.
+    predictorMatrix[11, x.offset + c(7, 8, 10, 13, 14, 17)] <- 1 # numrel man penalty is predicted by degree distrib, cp, prev, popgrowth
+    predictorMatrix[12, x.offset + c(7, 8, 10, 13, 14, 17)] <- 1 # # numrel woman penalty is predicted by degree distrib, cp, prev, popgrowth
+    predictorMatrix[13, x.offset + 17] <- 1 # conception.alpha_base is predicted by popgrowth
+    predictorMatrix[14, x.offset + c(7, 8, 10, 17)] <- 1 # baseline dissolution hazard predicted by degree distrib, cp, popgrowth
+    predictorMatrix[15, x.offset + c(7, 8, 10, 17)] <- 1 # age effect on dissolution hazard predicted by degree distrib, cp, popgrowth, HIV prev in older people (maybe?)
 
-
+    # NOTE: As it stands, each output statistic is predicted by ALL input and ALL other output statistics. That may not be a great idea, or even possible, if there is collinearity.
 
     # Because there are some many interaction terms, let's first try without any
     #df.give.to.mice <- cbind(df.give.to.mice, data.frame(y.1.y.2 = df.give.to.mice$y.1 * df.give.to.mice$y.2)) # adding interaction term
@@ -222,7 +259,10 @@ MICE_ABC <- function(targets = target.vector.master,
 
     experiments <- unlist(mice.test$imp) %>% matrix(., byrow = FALSE, ncol = length(x.names))
     # Before we check the suitability of the new experimental input parameter values, we must backtransform the logits to probabilities
-    experiments[, probs] <- boot::inv.logit(experiments[, probs])
+    # experiments[, probs] <- boot::inv.logit(experiments[, probs])
+    # Before we check the suitability of the new experimental input parameter values, we must backtransform the log values to natural values
+    experiments[, strict.positive.params] <- exp(experiments[, strict.positive.params])
+    }
     wave <- wave + 1
   }
 
