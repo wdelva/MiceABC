@@ -257,7 +257,7 @@ simpact.wrapper.master <- function(inputvector = input.vector){
     
     return(cd4count.atARTInit)
   }
-  
+  root.path <- dirname(getwd())
   destDir <- paste0(root.path, "/temp")
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.21,#1,
@@ -478,6 +478,12 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
     return(list())
   }
   
+  simpact.errFunction <-function(e){
+    if (length(grep("NaN",e$message)) != 0){
+      return(list())
+    }
+  }
+  
   # agemixing.lme.fitter <- function(data = dplyr::filter(agemix.model[[1]], Gender =="male")){
   #   men.lme <- lme(pagerelform ~ agerelform0,
   #                  data = data,
@@ -622,7 +628,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
     
     return(cd4count.atARTInit)
   }
-  
+  root.path <- dirname(getwd())
   destDir <- paste0(root.path, "/temp")
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.2, #0.21,#1,
@@ -693,7 +699,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   
   cfg <- cfg.list
   
-  cfg["population.maxevents"] <- as.numeric(cfg.list["population.simtime"][1]) * as.numeric(cfg.list["population.nummen"][1]) * 1
+  cfg["population.maxevents"] <- as.numeric(cfg.list["population.simtime"][1]) * as.numeric(cfg.list["population.nummen"][1]) * 3
   cfg["monitoring.fraction.log_viralload"] <- 0.3
   cfg["person.vsp.toacute.x"] <- 5 # See Bellan PLoS Medicine
   
@@ -744,17 +750,23 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   
   intervention <- interventionlist # scenario(interventionlist, tasp.indicator)
   
-  
-  results <- simpact.run(configParams = cfg,
+  results <- tryCatch(simpact.run(configParams = cfg,
                          destDir = destDir,
                          agedist = age.distr,
                          seed = seedid, #, Introducing ART has helped to keep the prevalence high
-                         intervention = intervention)
-  
-  if (as.numeric(results["eventsexecuted"]) >= (as.numeric(cfg["population.maxevents"]) - 1))
-  {
+                         intervention = intervention),
+                      error = simpact.errFunction)
+  # results <- simpact.run(configParams = cfg,
+  #                        destDir = destDir,
+  #                        agedist = age.distr,
+  #                        seed = seedid, #, Introducing ART has helped to keep the prevalence high
+  #                        intervention = intervention)
+  if (length(results) == 0){
     outputvector <- rep(NA, 17)
   } else {
+    if (as.numeric(results["eventsexecuted"]) >= (as.numeric(cfg["population.maxevents"]) - 1)) {
+      outputvector <- rep(NA, 17)
+    } else {
     datalist.agemix <- readthedata(results)
     agemix.df <- agemix.df.maker(datalist.agemix)
     
@@ -919,6 +931,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
                     hiv.prev.35.44.women,
                     hiv.prev.35.44.men, 
                     exp(growthrate))
+    }
   }
   return(outputvector)
 }
@@ -1045,6 +1058,23 @@ simpact.wrapper(test.inputvectorplusseed)
 # 17. exp(growthrate)) (1.01)
 
 targets.empirical <- c(4, 4, 0.7, 3, 1.5, -1, 1.29, 0.66, 1, 0.134, 0.2, 0.1, 0.42, 0.17, 0.37, 0.24, 1.01)
+targets.master <- c(4.0651198,
+                    3.5641622,
+                    0.5463380,
+                    1.8322277,
+                    1.3357401,
+                    -0.6137708,
+                    0.4686528,
+                    2.1738464,
+                    0.4688209,
+                    0.1203855,
+                    0.3389044,
+                    0.2751678,
+                    0.3911846,
+                    0.5899390,
+                    0.3227513,
+                    0.4395604,
+                    1.0111390)
   
 design.matrix.control <- matrix(rep(target.vector.master, reps), nrow = reps, byrow = TRUE)
 
@@ -1067,6 +1097,7 @@ sumsmstats.interv.df <- simpact.parallel(model = simpact.wrapper.master,
 
 
 ```{r loadmastermodeloutput}
+root.path <- dirname(getwd())
 load(file = paste0(root.path, "/MiceABC/incidence.rel.reduc.RData"))
 ```
 
@@ -1138,10 +1169,12 @@ ptm <- proc.time()
 # 14. dissolution.alpha_0 (-0.52)
 # 15. dissolution.alpha_4 (-0.05))
 
-MICE_ABC_testoutput <- MICE_ABC(targets = targets.empirical, # 17 output statistics c(4, 4, 0.7, 3, 1.5, -1, 1.29, 0.66, 1, 0.134, 0.2, 0.1, 0.42, 0.17, 0.37, 0.24, 1.01)
-                                 n.experiments = 16,
-                                 lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
-                                 uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
+# inputs: c(1.1, 0.25, 0, 3, 0.23, 0.23, 45, 45, -0.5, 2.8, -0.2, -0.2, -2.5, -0.52, -0.05)
+
+MICE_ABC_testoutput <- MICE_ABC(targets = targets.master, #targets.empirical, # 17 output statistics c(4, 4, 0.7, 3, 1.5, -1, 1.29, 0.66, 1, 0.134, 0.2, 0.1, 0.42, 0.17, 0.37, 0.24, 1.01)
+                                 n.experiments = 128,
+                                 lls = c(1,  0.12, -0.3, 2.5, 0.1, 0.1, 20, 20, -0.8, 2, -0.35, -0.35, -3.6, -0.8, -0.16), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
+                                 uls = c(1.2, 0.37, 0.3, 3.5, 0.4, 0.4, 66, 66, -0.25, 3.9, -0.1, -0.1, -1.4, -0.3,  -0.001), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
                                  model = simpact.wrapper,
                                  maxit = 20,
                                  maxwaves = 2, # and we can also try 10 to do the same as the 10 waves of Lenormand
@@ -1153,11 +1186,13 @@ mice.timeused # xxxx seconds
 ```
 
 ```{r save.calibration.results, eval = FALSE}
+root.path <- dirname(getwd())
 save(MICE_ABC_testoutput, file = paste0(root.path, "/MiceABC/mice.age-mixing.RData"))
 
 ```
 Now let's explore and visualise the results
 ```{r vis.calib.results}
+root.path <- dirname(getwd())
 load(file = paste0(root.path, "/MiceABC/reject.tasp.RData"))
 load(file = paste0(root.path, "/MiceABC/mice.tasp.RData"))
 
