@@ -70,9 +70,9 @@ MICE_ABC <- function(targets = targets.empirical,
     fine.flag <- as.logical(rowSums(fine) == ncol(fine))
     experiments <- experiments[fine.flag, ]
     #try(if(nrow(experiments) == 0) stop("no experiments in the range"))
-    while (nrow(experiments) > 15){
-
-
+    if (nrow(experiments) < 2){
+      wave <- maxwaves
+    } else {
     print(c(nrow(experiments), "experiments to be run"), quote = FALSE) # only for local testing. To be deleted after testing is completed
 
     calibration.list$experiments.executed[[wave]] <- nrow(experiments)
@@ -500,7 +500,6 @@ MiceABC.V8 <- function(targets = c(5.816, 3.924, 0.05916, 0.6628, 5.229, 1.4985,
     sim.results.with.design.df$y.8.sq.rel.dist <- ((sim.results.with.design.df$y.8 - targets[8]) / targets[8])^2
 
     sim.results.with.design.df$sum.sq.rel.dist <- sim.results.with.design.df$y.1.sq.rel.dist + sim.results.with.design.df$y.2.sq.rel.dist + sim.results.with.design.df$y.3.sq.rel.dist + sim.results.with.design.df$y.4.sq.rel.dist + sim.results.with.design.df$y.5.sq.rel.dist + sim.results.with.design.df$y.6.sq.rel.dist + sim.results.with.design.df$y.7.sq.rel.dist + sim.results.with.design.df$y.8.sq.rel.dist
-    browser()
 
     # 2b. Writing to list all the input and output of the executed experiments, so that we can plot it later
     calibration.list$sim.results.with.design[[wave]] <- sim.results.with.design.df
