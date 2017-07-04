@@ -942,7 +942,6 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
 
 ```{r define.miceabc.function, echo = FALSE}
 
-
 MICE_ABC <- function(targets = targets.empirical,
                      n.experiments = 16,
                      lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
@@ -1187,11 +1186,18 @@ MICE_ABC <- function(targets = targets.empirical,
 
 ```{r define.incremental.miceabc.function, echo = FALSE}
 
+root.path <- dirname(getwd())
+load(file = paste0(root.path, "/MiceABC/mice.age-mixing.RData")) # This loads the object MICE_ABC_testoutput
+load(file = paste0(root.path, "/MiceABC/mice.age-mixing.0.2.RData")) # This loads the object MICE_ABC_testoutput.2
+names(MICE_ABC_testoutput.2)
 
-MICE_ABC <- function(targets = targets.empirical,
-                     n.experiments = 16,
-                     lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
-                     uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
+previous.calib.input <- MICE_ABC_testoutput.2$inputoutput[[length(MICE_ABC_testoutput.2$inputoutput)]][, 1:length(x.names)]
+
+
+MICE_ABC.incremental <- function(targets = targets.empirical,
+                     previous.calib.input = previous.calib.input, #n.experiments = 16,
+                     #lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
+                     #uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
                      # probs = c(3, 7), # indicate in the lls and uls vectors, which elements represent probabilities strictly between 0 and 1
                      model = simpact.wrapper,
                      maxit = 10,
@@ -1201,11 +1207,17 @@ MICE_ABC <- function(targets = targets.empirical,
                      saturation.crit = 0){
   ptm <- proc.time() # Start the clock
 
-  range.width <- uls - lls
-  ll.mat <- matrix(rep(lls, n.experiments), nrow = n.experiments, byrow = TRUE)
-  range.width.mat <- matrix(rep(range.width, n.experiments), nrow = n.experiments, byrow = TRUE)
-  sobol.seq.0.1 <- sobol(n = n.experiments, dim = length(lls), init = TRUE, scrambling = 1, seed = 1, normal = FALSE)
-  experiments <- ll.mat + sobol.seq.0.1 * range.width.mat
+  #range.width <- uls - lls
+  #ll.mat <- matrix(rep(lls, n.experiments), nrow = n.experiments, byrow = TRUE)
+  #range.width.mat <- matrix(rep(range.width, n.experiments), nrow = n.experiments, byrow = TRUE)
+  #sobol.seq.0.1 <- sobol(n = n.experiments, dim = length(lls), init = TRUE, scrambling = 1, seed = 1, normal = FALSE)
+  experiments <- previous.calib.input #ll.mat + sobol.seq.0.1 * range.width.mat
+  previous.calib.lls <- as.numeric(apply(experiments, 2, min))
+  previous.calib.uls <- as.numeric(apply(experiments, 2, max))
+  # To see how the previous calibration shifted the input ranges, we should also recall the lls and uls of the calibration before the previous (which may be the initial naive range boundaries)
+  pre.experiments <- MICE_ABC_testoutput$inputoutput[[length(MICE_ABC_testoutput$inputoutput)]][, 1:length(x.names)]
+  pre.previous.calib.lls <- as.numeric(apply(pre.experiments, 2, min))
+  pre.previous.calib.uls <- as.numeric(apply(pre.experiments, 2, max))
 
   calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
 
