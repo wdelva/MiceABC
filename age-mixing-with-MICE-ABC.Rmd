@@ -1181,6 +1181,16 @@ MICE_ABC <- function(targets = targets.empirical,
 
 ```
 
+#### Testing a MICE-assisted calibration method with changing objective function (a.k.a. "moving targets" or "moving the goalposts")
+
+1. Decide on n.experiments from sobol sequences, based on computation time. 
+2. Determine max range of parameters that can be explored with sufficient density, given n.experiments.
+This is not straightforward because we do not know, initally, how changes in parameter values translate to changes in model output.
+3. Determine minimum value of m.experiments (training dataset) required for mice, given the number of predictor variables in the chained equations.
+4. Determine for which targets.intermediate level, there are at least m.experiments within a distance x
+5. Use this targets.intermediate in mice to propose and launch another n.experiments (or n-m experiments?)
+6. Determine for which NEW targets.intermediate level, closer to the empirical targets, there are at least m.experiments within a distance x. 
+7. Cycle between steps 5 and 6 until the empirical targets are within reach. 
 
 
 
@@ -1189,149 +1199,72 @@ MICE_ABC <- function(targets = targets.empirical,
 root.path <- dirname(getwd())
 load(file = paste0(root.path, "/MiceABC/mice.age-mixing.RData")) # This loads the object MICE_ABC_testoutput
 load(file = paste0(root.path, "/MiceABC/mice.age-mixing.0.2.RData")) # This loads the object MICE_ABC_testoutput.2
-names(MICE_ABC_testoutput.2)
+# names(MICE_ABC_testoutput.2)
 
 previous.calib.input <- MICE_ABC_testoutput.2$inputoutput[[length(MICE_ABC_testoutput.2$inputoutput)]][, 1:length(x.names)]
 
 
-MICE_ABC.incremental <- function(targets = targets.empirical,
+MICE_ABC.incremental <- function(targets = targets.master + 0.3 * targets.diff,
+                                 previous.data.lists = c(MICE_ABC_testoutput, MICE_ABC_testoutput.2),
+                                 
+                                 
                      previous.calib.input = previous.calib.input, #n.experiments = 16,
                      #lls = c(1.01, 0.15, -1, 2, 0.05, 0.05, 10,  10,  -1,   0, -1,   -1,   -5, -2,   -0.2), #c(2, -1,   0.1, 2, 1, 1, 0.3), #c(0.1, -3, 0.1,  0,  0,  0, 0.2),
                      #uls = c(3,    0.35,  1, 5, 1,       1, 100, 100, -0.2, 5, -0.1, -0.1, -1, -0.2,    0), #c(4, -0.2, 0.6, 8, 6, 6, 0.95), #c(5, -0.1, 1.0, 10, 10, 10, 1.0),
                      # probs = c(3, 7), # indicate in the lls and uls vectors, which elements represent probabilities strictly between 0 and 1
                      model = simpact.wrapper,
-                     maxit = 10,
+                     maxit = 50,
                      maxwaves = 2, # and we can also try 10 to do the same as the 10 waves of Lenormand
                      #reps = 5,
                      alpha = 0.25,
                      saturation.crit = 0){
   ptm <- proc.time() # Start the clock
+  
+  data.elements.location <- which(names(previous.data.lists) %in% "sim.results.with.design")
+  previous.data <- do.call(rbind, unlist(previous.data.lists[data.elements.location], recursive = FALSE))b # The input and output of ALL the simulations run until now.
 
-  #range.width <- uls - lls
-  #ll.mat <- matrix(rep(lls, n.experiments), nrow = n.experiments, byrow = TRUE)
-  #range.width.mat <- matrix(rep(range.width, n.experiments), nrow = n.experiments, byrow = TRUE)
-  #sobol.seq.0.1 <- sobol(n = n.experiments, dim = length(lls), init = TRUE, scrambling = 1, seed = 1, normal = FALSE)
-  experiments <- previous.calib.input #ll.mat + sobol.seq.0.1 * range.width.mat
-  previous.calib.lls <- as.numeric(apply(experiments, 2, min))
-  previous.calib.uls <- as.numeric(apply(experiments, 2, max))
-  # To see how the previous calibration shifted the input ranges, we should also recall the lls and uls of the calibration before the previous (which may be the initial naive range boundaries)
-  pre.experiments <- MICE_ABC_testoutput$inputoutput[[length(MICE_ABC_testoutput$inputoutput)]][, 1:length(x.names)]
-  pre.previous.calib.lls <- as.numeric(apply(pre.experiments, 2, min))
-  pre.previous.calib.uls <- as.numeric(apply(pre.experiments, 2, max))
+  # previous.calib.lls <- as.numeric(apply(experiments, 2, min))
+  # previous.calib.uls <- as.numeric(apply(experiments, 2, max))
+  # # To see how the previous calibration shifted the input ranges, we should also recall the lls and uls of the calibration before the previous (which may be the initial naive range boundaries)
+  # pre.experiments <- MICE_ABC_testoutput$inputoutput[[length(MICE_ABC_testoutput$inputoutput)]][, 1:length(x.names)]
+  # pre.previous.calib.lls <- as.numeric(apply(pre.experiments, 2, min))
+  # pre.previous.calib.uls <- as.numeric(apply(pre.experiments, 2, max))
 
-  calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
-
-  wave <- 1 # initiating the loop of waves of simulations (one iteration is one wave)
-  rel.dist.cutoff <- Inf # initially it is infinitely large, but in later iterations it shrinks
-  saturation <- 0
-  sim.results.with.design.df.selected <- NULL
-
-
-  while (wave <= maxwaves && saturation == 0){
-    print(c("wave", wave), quote = FALSE) # only for local testing. To be deleted after testing is completed
-    # These large and small enough tests could be commented out because the "true" parameter value may lie outside the initial parameter range.
-    # They may be useful to prevent infeasible MICE-derived proposals from running (e.g. positive parameters values that don't make sense)
-    large.enough <- t(t(experiments) >= lls)
-    small.enough <- t(t(experiments) <= uls)
-    fine <- large.enough & small.enough
-    fine.flag <- as.logical(rowSums(fine) == ncol(fine))
-    experiments <- experiments[fine.flag, ]
-    #try(if(nrow(experiments) == 0) stop("no experiments in the range"))
-    if (nrow(experiments) < 2){
-      wave <- maxwaves
-    } else {
-    print(c(nrow(experiments), "experiments to be run"), quote = FALSE) # only for local testing. To be deleted after testing is completed
-
-    calibration.list$experiments.executed[[wave]] <- nrow(experiments)
-
-    # Running the experiments
-    # nl.path <- "/Applications/NetLogo 6.0/app/"
-    # NLStart(nl.path, gui=FALSE, nl.obj="agemix.nl1", nl.jarname = 'netlogo-6.0.0.jar')
-    # model.path <- "/Users/delvaw/Google Drive/IBM course/tutorials/AgeMixing/Calibration/dummy.0.1.nlogo"
-    # NLLoadModel(model.path, nl.obj="agemix.nl1")
-    # source(file = "/Users/delvaw/Google Drive/IBM course/tutorials/AgeMixing/Calibration/agemix.simulate.R")
-
-    # sim.results.simple <- t(apply(experiments, 1, model, no.repeated.sim=reps)) # Maybe this apply() can be replaced by a faster foreach loop?
-    # Replacing NetLogo model with parallel Simpact model
-
-    # 1. Initially: n.experiments from sobol sequences. 7. Later, (1-alpha) fraction of n.experiments from MICE proposals
-    sim.results.simple <- simpact.parallel(model = model,
-                                           actual.input.matrix = experiments,
-                                           seed_count = 0,
-                                           n_cluster = 8)
-
-    #experiment.number <- 1:nrow(experiments)
-    sim.results.with.design.df <- as.data.frame(cbind(#experiment.number,
-      experiments,
-      sim.results.simple))
-    x.names <- paste0("x.", seq(1:ncol(experiments)))
-    y.names <- paste0("y.", seq(1:ncol(sim.results.simple)))
-    names(sim.results.with.design.df) <- c(x.names, y.names)
-
-    # 2. All n.experiments from sobol sequences get summarised measure of distance from target. 8. Distance measures for new proposals
-    # NEEDS TO BE AUTOMATED
-
-    # for(i in 1:6) { #-- Create objects  'r.1', 'r.2', ... 'r.6' --
-    #   nam <- paste("r", i, sep = ".")
-    #   assign(nam, 1:i)
-    # }
-
-    #browser()
-
-    sum.sq.rel.dist <- rep(0, nrow(sim.results.with.design.df))
+    sum.sq.rel.dist <- rep(0, nrow(previous.data))
     for(i in 1:length(targets)) {
       nam <- paste0("y.", i, ".sq.rel.dist")
-      val <- ((sim.results.simple[,i] - targets[i]) / targets[i])^2
+      val <- ((previous.data[,i] - targets[i]) / targets[i])^2
       assign(nam, val)
       sum.sq.rel.dist <- sum.sq.rel.dist + get(nam)
     }
 
-    sim.results.with.design.df$sum.sq.rel.dist <- sum.sq.rel.dist
+    previous.data$sum.sq.rel.dist <- sum.sq.rel.dist # We overwrite the distance measure with the new one, based on the new target
 
-    # sim.results.with.design.df$y.1.sq.rel.dist <- ((sim.results.with.design.df$y.1 - targets[1]) / targets[1])^2
-    # sim.results.with.design.df$y.2.sq.rel.dist <- ((sim.results.with.design.df$y.2 - targets[2]) / targets[2])^2
-    # sim.results.with.design.df$y.3.sq.rel.dist <- ((sim.results.with.design.df$y.3 - targets[3]) / targets[3])^2
-    # sim.results.with.design.df$y.4.sq.rel.dist <- ((sim.results.with.design.df$y.4 - targets[4]) / targets[4])^2
-    # sim.results.with.design.df$y.5.sq.rel.dist <- ((sim.results.with.design.df$y.5 - targets[5]) / targets[5])^2
-    # sim.results.with.design.df$y.6.sq.rel.dist <- ((sim.results.with.design.df$y.6 - targets[6]) / targets[6])^2
-    # sim.results.with.design.df$y.7.sq.rel.dist <- ((sim.results.with.design.df$y.7 - targets[7]) / targets[7])^2
-    # sim.results.with.design.df$y.8.sq.rel.dist <- ((sim.results.with.design.df$y.8 - targets[8]) / targets[8])^2
-    # sim.results.with.design.df$y.9.sq.rel.dist <- ((sim.results.with.design.df$y.9 - targets[9]) / targets[9])^2
-    #
-    #
-    # sim.results.with.design.df$sum.sq.rel.dist <- sim.results.with.design.df$y.1.sq.rel.dist + sim.results.with.design.df$y.2.sq.rel.dist + sim.results.with.design.df$y.3.sq.rel.dist + sim.results.with.design.df$y.4.sq.rel.dist + sim.results.with.design.df$y.5.sq.rel.dist + sim.results.with.design.df$y.6.sq.rel.dist + sim.results.with.design.df$y.7.sq.rel.dist + sim.results.with.design.df$y.8.sq.rel.dist + sim.results.with.design.df$y.9.sq.rel.dist
-
-    # 2b. Writing to list all the input and output of the executed experiments, so that we can plot it later
-    calibration.list$sim.results.with.design[[wave]] <- sim.results.with.design.df
-
-    # 10. Calculate fraction of new (1-alpha frac *n.experiments) distances that are below "old" distance threshold. NOT CURRENTLY USED BECAUSE saturation.crit = 0.
-    below.old.treshold <- sim.results.with.design.df$sum.sq.rel.dist < rel.dist.cutoff
-    frac.below.old.threshold <- sum(below.old.treshold %in% TRUE) / round(n.experiments * (1-alpha))
-    if(frac.below.old.threshold < saturation.crit) saturation <- 1 # If less than the fraction saturation.crit of the new experiments a closer fit than the previous batch of retained experiments, the loop must be terminated.
-
+   
 
     # 9. Merge with previously kept alpha fraction shortest distances
-    sim.results.with.design.df <- rbind(sim.results.with.design.df.selected, sim.results.with.design.df) # Initially sim.results.with.design.df.selected = NULL
+    # sim.results.with.design.df <- rbind(sim.results.with.design.df.selected, sim.results.with.design.df) # Initially sim.results.with.design.df.selected = NULL
+    # Not sure if/how we are going to use this in the new algorithm
 
     # 3. Keeping alpha fraction shortest distances
 
-    dist.order <- order(sim.results.with.design.df$sum.sq.rel.dist) # Ordering the squared distances from small to big. The last observation (targets) should be ranked first
-    last.one.selected <- round(alpha * n.experiments) # OR IT COULD ALSO BE WRITTEN AS round(alpha * length(dist.order)) BUT IF RANGE CHECKS ARE ON, THE nrow IS NOT NECESSARILY = n.experiments
+    dist.order <- order(previous.data$sum.sq.rel.dist) # Ordering the squared distances from small to big. The last observation (targets) should be ranked first
+    last.one.selected <- round(alpha * length(dist.order)) # OR IT COULD ALSO BE WRITTEN AS round(alpha * length(dist.order)) BUT IF RANGE CHECKS ARE ON, THE nrow IS NOT NECESSARILY = n.experiments
     selected.distances <- dist.order[1:last.one.selected]
-    sim.results.with.design.df.selected <- sim.results.with.design.df[selected.distances, ] %>% filter(complete.cases(.)) # Here we filter out any experiments that gave NA output
+    previous.data.selected <- previous.data[selected.distances, ] %>% dplyr::filter(complete.cases(.)) # Here we filter out any experiments that gave NA output
 
     # 4. Set distance threshold at alpha-percentile best distance. 11. Update distance threshold
-    rel.dist.cutoff <- max(sim.results.with.design.df.selected$sum.sq.rel.dist)  # We update the rel.dist.cutoff, based on the alpha fraction best parametersets
+    rel.dist.cutoff <- max(previous.data.selected$sum.sq.rel.dist)  # We update the rel.dist.cutoff, based on the alpha fraction best parametersets
 
     # 5. Write alpha fraction of input-output-distances and distance threshold to list. 12. Write new best alpha fraction and updated threshold to list
-    calibration.list$inputoutput[[wave]] <- sim.results.with.design.df.selected
-    calibration.list$rel.dist.cutoff[[wave]] <- rel.dist.cutoff
+    #calibration.list$inputoutput[[wave]] <- previous.data.selected
+    #calibration.list$rel.dist.cutoff[[wave]] <- rel.dist.cutoff
 
     # 6. Feed MICE the best alpha fraction and ask for (1-alpha) fraction proposals based on targets
     targets.df <- as.data.frame(matrix(targets, ncol = length(targets))) # Putting target in dataframe format
 
     names(targets.df) <- y.names
-    df.give.to.mice <- full_join(dplyr::select(sim.results.with.design.df.selected,
+    df.give.to.mice <- dplyr::full_join(dplyr::select(previous.data.selected,
                                                -contains("sq.rel.dist")), # adding target to training dataset
                                  targets.df,
                                  by = names(targets.df)) # "by" statement added to avoid printing message of the variables were used for joining
@@ -1411,7 +1344,7 @@ MICE_ABC.incremental <- function(targets = targets.empirical,
     print(c(nrow(df.give.to.mice), "nrows to give to mice"), quote = FALSE)
 
     mice.test <- mice(data = df.give.to.mice, # the dataframe with missing data
-                      m = round(n.experiments * (1-alpha)), # number of imputations
+                      m = 128, #round(n.experiments * (1-alpha)), # number of imputations # Let's ask for 128 imputations
                       predictorMatrix = predictorMatrix,
                       method = "norm",
                       defaultMethod = "norm",
