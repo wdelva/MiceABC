@@ -1205,7 +1205,7 @@ previous.calib.input <- MICE_ABC_testoutput.2$inputoutput[[length(MICE_ABC_testo
 
 
 MICE_ABC.incremental <- function(targets = targets.master + 0.3 * targets.diff,
-                                 previous.data.lists = c(MICE_ABC_testoutput, MICE_ABC_testoutput.2),
+                                 previous.data.lists = c(MICE_ABC_testoutput, MICE_ABC_testoutput.2, MICE_ABC_testoutput.3),
                                  
                                  
                      previous.calib.input = previous.calib.input, #n.experiments = 16,
@@ -1221,7 +1221,7 @@ MICE_ABC.incremental <- function(targets = targets.master + 0.3 * targets.diff,
   ptm <- proc.time() # Start the clock
   
   data.elements.location <- which(names(previous.data.lists) %in% "sim.results.with.design")
-  previous.data <- do.call(rbind, unlist(previous.data.lists[data.elements.location], recursive = FALSE))b # The input and output of ALL the simulations run until now.
+  previous.data <- do.call(rbind, unlist(previous.data.lists[data.elements.location], recursive = FALSE)) # The input and output of ALL the simulations run until now.
 
   # previous.calib.lls <- as.numeric(apply(experiments, 2, min))
   # previous.calib.uls <- as.numeric(apply(experiments, 2, max))
@@ -1229,11 +1229,59 @@ MICE_ABC.incremental <- function(targets = targets.master + 0.3 * targets.diff,
   # pre.experiments <- MICE_ABC_testoutput$inputoutput[[length(MICE_ABC_testoutput$inputoutput)]][, 1:length(x.names)]
   # pre.previous.calib.lls <- as.numeric(apply(pre.experiments, 2, min))
   # pre.previous.calib.uls <- as.numeric(apply(pre.experiments, 2, max))
+  
+  
+  calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
+  wave <- 1 # initiating the loop of waves of simulations (one iteration is one wave)
+  rel.dist.cutoff <- Inf # initially it is infinitely large, but in later iterations it shrinks
+  saturation <- 0
+  sim.results.with.design.df.selected <- NULL
 
+  while (wave <= maxwaves && saturation == 0){
+    # print(c("wave", wave), quote = FALSE) # only for local testing. To be deleted after testing is completed
+    # large.enough <- t(t(experiments) >= lls)
+    # small.enough <- t(t(experiments) <= uls)
+    # fine <- large.enough & small.enough
+    # fine.flag <- as.logical(rowSums(fine) == ncol(fine))
+    # experiments <- experiments[fine.flag, ]
+    if (nrow(experiments) < 2){
+      wave <- maxwaves
+    } else {
+    print(c(nrow(experiments), "experiments to be run"), quote = FALSE) # only for local testing. To be deleted after testing is completed
+    calibration.list$experiments.executed[[wave]] <- nrow(experiments)
+
+
+    # 1. Initially: n.experiments from sobol sequences. 7. Later, (1-alpha) fraction of n.experiments from MICE proposals
+    sim.results.simple <- simpact.parallel(model = model,
+                                           actual.input.matrix = experiments,
+                                           seed_count = 0,
+                                           n_cluster = 8)
+
+ 
+    sim.results.with.design.df <- as.data.frame(cbind(experiments,
+                                                      sim.results.simple))
+
+    x.names <- paste0("x.", seq(1:ncol(experiments)))
+    y.names <- paste0("y.", seq(1:ncol(sim.results.simple)))
+    names(sim.results.with.design.df) <- c(x.names, y.names)
+        sim.results.with.design.df$sum.sq.rel.dist <- NA
+
+  x.offset <- length(x.names)
+  
+  MICE_ABC_testoutput.3 <- list()
+  MICE_ABC_testoutput.3$sim.results.with.design <- sim.results.with.design.df
+  previous.data.lists = c(MICE_ABC_testoutput, MICE_ABC_testoutput.2)
+  data.elements.location <- which(names(previous.data.lists) %in% "sim.results.with.design")
+  previous.data <- do.call(rbind, unlist(previous.data.lists[data.elements.location], recursive = FALSE)) # The input and output of ALL the simulations run until now.
+  previous.data <- rbind(previous.data, MICE_ABC_testoutput.3$sim.results.with.design)
+  # Now we shift the goalposts
+  targets <- targets.master + 0.4 * targets.diff
+
+  
     sum.sq.rel.dist <- rep(0, nrow(previous.data))
     for(i in 1:length(targets)) {
       nam <- paste0("y.", i, ".sq.rel.dist")
-      val <- ((previous.data[,i] - targets[i]) / targets[i])^2
+      val <- ((previous.data[,i + x.offset] - targets[i]) / targets[i])^2
       assign(nam, val)
       sum.sq.rel.dist <- sum.sq.rel.dist + get(nam)
     }
@@ -1316,7 +1364,6 @@ MICE_ABC.incremental <- function(targets = targets.master + 0.3 * targets.diff,
     # 16. hiv.prev.35.44.men (0.24)
     # 17. exp(growthrate)) (1.01)
 
-    x.offset <- length(x.names)
 
 
     predictorMatrix[1:length(x.names), ] <- 0 # First we "empty" the relevant rows, then we refill them.
