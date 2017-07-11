@@ -1365,18 +1365,9 @@ This is not straightforward because we do not know, initally, how changes in par
 ```{r define.incremental.miceabc.function, echo = FALSE}
 
 root.path <- dirname(getwd())
-load(file = paste0(root.path, "/MiceABC/mice.age-mixing.RData")) # This loads the object MICE_ABC_testoutput
-load(file = paste0(root.path, "/MiceABC/mice.age-mixing.0.2.RData")) # This loads the object MICE_ABC_testoutput.2
-load(file = paste0(root.path, "/MiceABC/mice.age-mixing.0.4.RData")) # This loads the object MICE_ABC_testoutput.3
-# names(MICE_ABC_testoutput.2)
-
-previous.calib.input <- MICE_ABC_testoutput.2$inputoutput[[length(MICE_ABC_testoutput.2$inputoutput)]][, 1:length(x.names)]
-
 
 MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
-                                 # targets.master = targets.master, # 0.3 * targets.diff,
-                                 #previous.data.lists = c(MICE_ABC_testoutput, MICE_ABC_testoutput.2, MICE_ABC_testoutput.3),
-                                 RMSD.tol.max = 2, # Initially a wide tolerance range, which then gradually shrinks, once the intermediate targets have converged with the empirical targets
+                                 RMSD.tol.max = 2,
                                  min.givetomice = 128,
                                  n.experiments = 512,
                                  lls = c(1,  0.12, -0.3, 2.5, 0.1, 0.1, 20, 20, -0.8, 2, -0.35, -0.35, -3.6, -0.8, -0.16),
@@ -1384,36 +1375,222 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
                                  model = simpact.wrapper,
                                  maxit = 50,
                                  maxwaves = 4){
-  ptm <- proc.time() # Start the clock
-  range.width <- uls - lls
-  ll.mat <- matrix(rep(lls, n.experiments), nrow = n.experiments, byrow = TRUE)
-  range.width.mat <- matrix(rep(range.width, n.experiments), nrow = n.experiments, byrow = TRUE)
-  sobol.seq.0.1 <- sobol(n = n.experiments, dim = length(lls), init = TRUE, scrambling = 1, seed = 1, normal = FALSE)
-  experiments <- ll.mat + sobol.seq.0.1 * range.width.mat
-
+  # 0. Start the clock
+  ptm <- proc.time()
   calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
-
   wave <- 1 # initiating the loop of waves of simulations (one iteration is one wave)
   rel.dist.cutoff <- Inf # initially it is infinitely large, but in later iterations it shrinks
-  sim.results.with.design.df.selected <- NULL
   sim.results.with.design.df <- NULL # Will be growing with each wave (appending)
-
-
-  while (wave <= maxwaves){
-    print(c("wave", wave), quote = FALSE) # only for local testing. To be deleted after testing is completed
+  sim.results.with.design.df.selected <- NULL
+  intermediate.features <- NULL
+  
+  # 1. Start loop of waves, based on comparing intermediate features with targets.empirical
+  while (wave <= maxwaves & intermediate.features != targets.empirical){
+    if (wave == 1){
+      # 2. Initial, naive results, based on Sobol sequences
+      range.width <- uls - lls
+      ll.mat <- matrix(rep(lls, n.experiments), nrow = n.experiments, byrow = TRUE)
+      range.width.mat <- matrix(rep(range.width, n.experiments), nrow = n.experiments, byrow = TRUE)
+      sobol.seq.0.1 <- sobol(n = n.experiments, dim = length(lls), init = TRUE, scrambling = 1, seed = 1, normal = FALSE)
+      experiments <- ll.mat + sobol.seq.0.1 * range.width.mat
+    }
     
-    print(c(nrow(experiments), "experiments to be run"), quote = FALSE) # only for local testing. To be deleted after testing is completed
-
-    calibration.list$experiments.executed[[wave]] <- nrow(experiments)
-
-    # 1. Initially: n.experiments from sobol sequences. 7. Later, (1-alpha) fraction of n.experiments from MICE proposals
     sim.results.simple <- simpact.parallel(model = model,
                                            actual.input.matrix = experiments,
                                            seed_count = 0,
                                            n_cluster = 8)
     
     new.sim.results.with.design.df <- as.data.frame(cbind(experiments,
-                                                         sim.results.simple))
+                                                          sim.results.simple))
+    x.names <- paste0("x.", seq(1:ncol(experiments)))
+    y.names <- paste0("y.", seq(1:ncol(sim.results.simple)))
+    x.offset <- length(x.names)
+    names(new.sim.results.with.design.df) <- c(x.names, y.names)
+    
+    new.sim.results.with.design.df <- new.sim.results.with.design.df %>% dplyr::filter(complete.cases(.))
+    sim.results.with.design.df <- rbind(sim.results.with.design.df, new.sim.results.with.design.df)
+    experim.median.features <- med(dplyr::select(sim.results.with.design.df, contains("y.")))$median
+    
+    # 3. Find intermediate features and RMSD.tol for which n.close.to.targets >= min.givetomice
+    targets.diff <- targets.empirical - experim.median.features # First we determine how far the empirical targets are away from the median features of the executed experiments
+    candidate.RMSD.tol <- Inf # Initially, we assume that the RMSD cut-off needs to be infinitely large to have sufficient observations to give to mice.
+    
+    for (steps.intermediate.targets in 0:100){ # We make 1% steps from empirical targets to experimental median features
+      candidate.intermediate.features <- targets.empirical - (targets.diff * steps.intermediate.targets) / 100
+      for (steps.RMSD.tol in 0:100){ # We make 1% steps from RMSD.tol.max to RMSD.tol = 0
+        RMSD.tol <- RMSD.tol.max * (100 - steps.RMSD.tol) / 100
+        
+        for (i in 1:length(candidate.intermediate.features)) {
+          name.dist <- paste0("y.", i, ".sq.rel.dist")
+          value.dist <- ((sim.results.with.design.df[,i + x.offset] - candidate.intermediate.features[i]) / candidate.intermediate.features[i])^2
+          assign(name.dist, value.dist)
+          sum.sq.rel.dist <- sum.sq.rel.dist + get(name.dist)
+        }
+        RMSD <- sqrt(sum.sq.rel.dist / length(candidate.intermediate.features))
+        n.close.to.targets <- sum(RMSD < RMSD.tol, na.rm = TRUE)
+        large.enough.training.df <- n.close.to.targets >= min.givetomice
+        if (large.enough.training.df == TRUE){
+          if (RMSD.tol < candidate.RMSD.tol){
+            candidate.RMSD.tol <- RMSD.tol
+            calibration.list$intermediate.features[[wave]] <- candidate.intermediate.features
+            calibration.list$steps.intermediate.targets[[wave]] <- steps.intermediate.targets # 0 means targets.empirical; 100 means experim.median.features
+            calibration.list$RMSD.tol[[wave]] <- RMSD.tol 
+            calibration.list$n.close.to.targets[[wave]] <- n.close.to.targets
+          }
+        }
+      }
+    }
+    
+    intermediate.features <- calibration.list$intermediate.features[[wave]]
+    RMSD.tol <- calibration.list$RMSD.tol[[wave]]
+    
+    # 4. Calculate RMSD values for these intermediate.features and the RMSD.tol found
+    for (i in 1:length(intermediate.features)) {
+      name.dist <- paste0("y.", i, ".sq.rel.dist")
+      value.dist <- ((sim.results.with.design.df[,i + x.offset] - intermediate.features[i]) / intermediate.features[i])^2
+      assign(name.dist, value.dist)
+      sum.sq.rel.dist <- sum.sq.rel.dist + get(name.dist)
+    }
+    RMSD <- sqrt(sum.sq.rel.dist / length(intermediate.features))
+    sim.results.with.design.df$RMSD <- RMSD
+    n.close.to.targets <- sum(RMSD < RMSD.tol, na.rm = TRUE)
+    
+    # 5. Select n.close.to.targets shortest distances
+    dist.order <- order(RMSD) # Ordering the squared distances from small to big.
+    selected.distances <- dist.order[1:n.close.to.targets]
+    sim.results.with.design.df.selected <- sim.results.with.design.df[selected.distances, ] 
+    
+    # 6. Record selected experiments to give to mice for this wave
+    calibration.list$selected.experiments[[wave]] <- sim.results.with.design.df.selected
+    
+    # 7. Put intermediate features in dataframe format
+    intermediate.features.df <- as.data.frame(matrix(intermediate.features, ncol = length(intermediate.features)))
+    names(intermediate.features.df) <- y.names
+    
+    # 8. Prepare dataframe to give to mice: selected experiments plus intermediate features
+    df.give.to.mice <- dplyr::full_join(dplyr::select(sim.results.with.design.df.selected,
+                                                      -contains("RMSD")), # adding target to training dataset
+                                        intermediate.features.df,
+                                        by = names(intermediate.features.df)) # "by" statement added to avoid printing message of the variables were used for joining
+    
+    # We are transforming parameters that are necessarily strictly positive: sigma, gamma.a, gamma.b.
+    # We could also consider a similar transformation for input parameters that we think should be negative (e.g. formation.hazard.agegapry.gap_factor_man_exp) but for now not yet
+    strict.positive.params <- c(4:8)
+    df.give.to.mice[, strict.positive.params] <- log(df.give.to.mice[, strict.positive.params])
+    
+    # 9. Override default predictorMatrix with a sparser matrix
+    # Let's think a bit more carefully about which variables should be allowed as input for which input parameters.
+    # IN THE FUTURE THIS COULD BE AUTOMATED WITH VARIABLE SELECTION ALGORITHMS.
+    predictorMatrix <- (1 - diag(1, ncol(df.give.to.mice))) # This is the default matrix.
+    # Let's now modify the first 15 rows of this matrix, corresponding to the indicators of predictor variables for the input variables. In brackets the values for the master model.
+    # 1. hivtransmission.param.f1 (2)
+    # 2. formation.hazard.agegapry.gap_agescale_man = formation.hazard.agegapry.gap_agescale_woman (0.25)
+    # 3. person.agegap.man.dist.normal.mu = person.agegap.woman.dist.normal.mu (0)
+    # 4. person.agegap.man.dist.normal.sigma = person.agegap.woman.dist.normal.sigma (3)
+    # 5. person.person.eagerness.man.dist.gamma.a (0.23)
+    # 6. person.person.eagerness.woman.dist.gamma.a (0.23)
+    # 7. person.person.eagerness.man.dist.gamma.b (45)
+    # 8. person.person.eagerness.woman.dist.gamma.b (45)
+    # 9. formation.hazard.agegapry.gap_factor_man_exp = formation.hazard.agegapry.gap_factor_woman_exp (-0.5)
+    # 10. formation.hazard.agegapry.baseline (0)
+    # 11. formation.hazard.agegapry.numrel_man (-0.5)
+    # 12. formation.hazard.agegapry.numrel_woman (-0.5)
+    # 13. conception.alpha_base (-2.5)
+    # 14. dissolution.alpha_0 (-0.52)
+    # 15. dissolution.alpha_4 (-0.05))
+    
+    # And a reminder of the output vector
+    # 1. AAD.male (4)
+    # 2. SDAD.male (4)
+    # 3. slope.male (0.7)
+    # 4. WSD.male (3)
+    # 5. BSD.male (1.5)
+    # 6. intercept.male (-1)
+    # 7. shape.nb.male (1.29)
+    # 8. scale.nb.male (0.66)
+    # 9. pp.cp.6months.male (0.134)
+    # 10. hiv.prev.lt25.women (0.2)
+    # 11. hiv.prev.lt25.men (0.1)
+    # 12. hiv.prev.25.34.women (0.42)
+    # 13. hiv.prev.25.34.men (0.17)
+    # 14. hiv.prev.35.44.women (0.37)
+    # 15. hiv.prev.35.44.men (0.24)
+    # 16. exp(growthrate)) (1.01)
+    
+    
+    predictorMatrix[1:length(x.names), ] <- 0 # First we "empty" the relevant rows, then we refill them.
+    # We are currently not allowing input variables to be predicted by other predictor variables. Only via output variables. We could change this at a later stage.
+    predictorMatrix[1, x.offset + 11:12] <- 1 # relative susceptibility in young women is predicted by HIV prevalence in young men and women
+    predictorMatrix[2, x.offset + 3] <- 1 # agescale predicted by slope
+    predictorMatrix[3, x.offset + c(1, 3, 6)] <- 1 # mean of the person-specific age gap preferences is predicted by slope, intercept and AAD
+    predictorMatrix[4, x.offset + c(2, 4, 5)] <- 1 # sd of the person-specific age gap preferences is predicted by SD, WSD, BSD
+    predictorMatrix[5, x.offset + c(7, 8, 10, 14, 17)] <- 1 # man gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    predictorMatrix[6, x.offset + c(7, 8, 10, 13, 17)] <- 1 # woman gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.women, exp(growthrate)
+    predictorMatrix[7, x.offset + c(7, 8, 10, 14, 17)] <- 1 # man gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    predictorMatrix[8, x.offset + c(7, 8, 10, 13, 17)] <- 1 # woman gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    predictorMatrix[9, x.offset + c(2, 4, 5, 7, 8, 15, 16, 17)] <- 1 # formation.hazard.agegapry.gap_factor_x_exp is predicted by population growth, age gap variance, hiv prevalence,
+    predictorMatrix[10, x.offset + c(7, 8, 10, 13, 14, 17)] <- 1 # baseline formation hazard predicted by HIV prevalence, cp, degree distrib. HIV prevalence.
+    predictorMatrix[11, x.offset + c(7, 8, 10, 13, 14, 17)] <- 1 # numrel man penalty is predicted by degree distrib, cp, prev, popgrowth
+    predictorMatrix[12, x.offset + c(7, 8, 10, 13, 14, 17)] <- 1 # # numrel woman penalty is predicted by degree distrib, cp, prev, popgrowth
+    predictorMatrix[13, x.offset + 17] <- 1 # conception.alpha_base is predicted by popgrowth
+    predictorMatrix[14, x.offset + c(7, 8, 10, 17)] <- 1 # baseline dissolution hazard predicted by degree distrib, cp, popgrowth
+    predictorMatrix[15, x.offset + c(7, 8, 10, 17)] <- 1 # age effect on dissolution hazard predicted by degree distrib, cp, popgrowth, HIV prev in older people (maybe?)
+    
+    # NOTE: As it stands, each output statistic is predicted by ALL input and ALL other output statistics. That may not be a great idea, or even possible, if there is collinearity.
+    
+    print(c(nrow(df.give.to.mice), "nrows to give to mice"), quote = FALSE)
+    
+    # 10. Let mice propose parameter values that are predicted by the intermediate features
+    mice.test <- mice(data = df.give.to.mice, # the dataframe with missing data
+                      m = n.experiments, # number of imputations
+                      predictorMatrix = predictorMatrix,
+                      method = "norm",
+                      defaultMethod = "norm",
+                      maxit = maxit,
+                      printFlag = FALSE,
+                      data.init = NULL)
+    
+    # 11. Turn mice proposals into a new matrix of experiments
+    experiments <- unlist(mice.test$imp) %>% matrix(., byrow = FALSE, ncol = length(x.names))
+    # Before we check the suitability of the new experimental input parameter values, we must backtransform the log values to natural values
+    experiments[, strict.positive.params] <- exp(experiments[, strict.positive.params])
+    
+    # 12. Update wave count
+    wave <- wave + 1
+  }
+  
+  # 13. Check if intermediate features have converged to empirical targests (if not, then maxwaves is reached)
+  if (intermediate.features == targets.empirical){
+    # 14. Do more "traditional mice optimisation" for the remaining waves
+    
+  }
+  
+  # 15. Stop clock and return calibration list
+  calibration.list$secondspassed <- proc.time() - ptm # Stop the clock
+  return(calibration.list)
+} 
+
+
+
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+  while (wave <= maxwaves){
+    #print(c("wave", wave), quote = FALSE) # only for local testing. To be deleted after testing is completed
+    
+    #print(c(nrow(experiments), "experiments to be run"), quote = FALSE) # only for local testing. To be deleted after testing is completed
+
+
+    # 1. Initially: n.experiments from sobol sequences. 7. Later, (1-alpha) fraction of n.experiments from MICE proposals
+    
     
     
     # We should consider calculating an empirical median of the multivariate distribution of simulation outputs, and use this
