@@ -1263,7 +1263,7 @@ simpact.parallel <- function(model = simpact.wrapper,
 
 
 Let's create the "truth" with the master model.
-```{r truth, cache = TRUE, echo = FALSE, message = FALSE, warning = FALSE, results = "hide", eval = FALSE}
+```{r truth, cache = TRUE, echo = FALSE, message = FALSE, warning = FALSE, results = "hide", eval = TRUE}
 reps <- 2
 
 target.vector.master <- c(1.1, 0.25, 0, 3, 0.23, 0.23, 45, 45, -0.5, 2.8, -0.2, -0.2, -2.5, -0.52, -0.05)
@@ -1368,8 +1368,8 @@ root.path <- dirname(getwd())
 
 MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
                                  RMSD.tol.max = 2,
-                                 min.givetomice = 128,
-                                 n.experiments = 512,
+                                 min.givetomice = 64,
+                                 n.experiments = 256,
                                  lls = c(1,  0.12, -0.3, 2.5, 0.1, 0.1, 20, 20, -0.8, 2, -0.35, -0.35, -3.6, -0.8, -0.16),
                                  uls = c(1.2, 0.37, 0.3, 3.5, 0.4, 0.4, 66, 66, -0.25, 3.9, -0.1, -0.1, -1.4, -0.3,  -0.001),
                                  model = simpact.wrapper,
@@ -1399,6 +1399,8 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
                                            actual.input.matrix = experiments,
                                            seed_count = 0,
                                            n_cluster = 8)
+    # save(sim.results.simple, file = "/Users/delvaw/Documents/MiceABC/sim.results.simple.RData")
+    load(file = "/Users/delvaw/Documents/MiceABC/sim.results.simple.RData")
     
     new.sim.results.with.design.df <- as.data.frame(cbind(experiments,
                                                           sim.results.simple))
@@ -1414,12 +1416,14 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
     # 3. Find intermediate features and RMSD.tol for which n.close.to.targets >= min.givetomice
     targets.diff <- targets.empirical - experim.median.features # First we determine how far the empirical targets are away from the median features of the executed experiments
     candidate.RMSD.tol <- Inf # Initially, we assume that the RMSD cut-off needs to be infinitely large to have sufficient observations to give to mice.
-    
-    for (steps.intermediate.targets in 0:100){ # We make 1% steps from empirical targets to experimental median features
-      candidate.intermediate.features <- targets.empirical - (targets.diff * steps.intermediate.targets) / 100
-      for (steps.RMSD.tol in 0:100){ # We make 1% steps from RMSD.tol.max to RMSD.tol = 0
-        RMSD.tol <- RMSD.tol.max * (100 - steps.RMSD.tol) / 100
+    n.close.to.targets.mat <- matrix(NA, nrow = 11, ncol = 11)
+
+    for (steps.intermediate.targets in 0:10){ # We make 10% steps from empirical targets to experimental median features
+      candidate.intermediate.features <- targets.empirical - (targets.diff * steps.intermediate.targets) / 10
+      for (steps.RMSD.tol in 0:10){ # We make 10% steps from RMSD.tol.max to RMSD.tol = 0
+        RMSD.tol <- RMSD.tol.max * (10 - steps.RMSD.tol) / 10
         
+        sum.sq.rel.dist <- rep(0, nrow(sim.results.with.design.df))
         for (i in 1:length(candidate.intermediate.features)) {
           name.dist <- paste0("y.", i, ".sq.rel.dist")
           value.dist <- ((sim.results.with.design.df[,i + x.offset] - candidate.intermediate.features[i]) / candidate.intermediate.features[i])^2
@@ -1428,32 +1432,36 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
         }
         RMSD <- sqrt(sum.sq.rel.dist / length(candidate.intermediate.features))
         n.close.to.targets <- sum(RMSD < RMSD.tol, na.rm = TRUE)
+        n.close.to.targets.mat[(1+steps.intermediate.targets), (1+steps.RMSD.tol)] <- n.close.to.targets
         large.enough.training.df <- n.close.to.targets >= min.givetomice
         if (large.enough.training.df == TRUE){
           if (RMSD.tol < candidate.RMSD.tol){
-            candidate.RMSD.tol <- RMSD.tol
-            calibration.list$intermediate.features[[wave]] <- candidate.intermediate.features
-            calibration.list$steps.intermediate.targets[[wave]] <- steps.intermediate.targets # 0 means targets.empirical; 100 means experim.median.features
-            calibration.list$RMSD.tol[[wave]] <- RMSD.tol 
-            calibration.list$n.close.to.targets[[wave]] <- n.close.to.targets
+            final.RMSD.tol <- RMSD.tol
+            final.intermediate.features <- candidate.intermediate.features
+            #calibration.list$intermediate.features[[wave]] <- final.intermediate.features
+            #calibration.list$steps.intermediate.targets[[wave]] <- steps.intermediate.targets # 0 means targets.empirical; 100 means experim.median.features
+            #calibration.list$RMSD.tol[[wave]] <- RMSD.tol 
+            #calibration.list$n.close.to.targets[[wave]] <- n.close.to.targets
           }
         }
       }
     }
     
-    intermediate.features <- calibration.list$intermediate.features[[wave]]
-    RMSD.tol <- calibration.list$RMSD.tol[[wave]]
+    final.RMSD.tol
+    final.intermediate.features
+    
     
     # 4. Calculate RMSD values for these intermediate.features and the RMSD.tol found
-    for (i in 1:length(intermediate.features)) {
+    sum.sq.rel.dist <- rep(0, nrow(sim.results.with.design.df))
+    for (i in 1:length(final.intermediate.features)) {
       name.dist <- paste0("y.", i, ".sq.rel.dist")
-      value.dist <- ((sim.results.with.design.df[,i + x.offset] - intermediate.features[i]) / intermediate.features[i])^2
+      value.dist <- ((sim.results.with.design.df[,i + x.offset] - final.intermediate.features[i]) / final.intermediate.features[i])^2
       assign(name.dist, value.dist)
       sum.sq.rel.dist <- sum.sq.rel.dist + get(name.dist)
     }
-    RMSD <- sqrt(sum.sq.rel.dist / length(intermediate.features))
+    RMSD <- sqrt(sum.sq.rel.dist / length(final.intermediate.features))
     sim.results.with.design.df$RMSD <- RMSD
-    n.close.to.targets <- sum(RMSD < RMSD.tol, na.rm = TRUE)
+    n.close.to.targets <- sum(RMSD < final.RMSD.tol, na.rm = TRUE)
     
     # 5. Select n.close.to.targets shortest distances
     dist.order <- order(RMSD) # Ordering the squared distances from small to big.
