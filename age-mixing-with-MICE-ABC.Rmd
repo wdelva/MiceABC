@@ -1417,6 +1417,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
     targets.diff <- targets.empirical - experim.median.features # First we determine how far the empirical targets are away from the median features of the executed experiments
     candidate.RMSD.tol <- Inf # Initially, we assume that the RMSD cut-off needs to be infinitely large to have sufficient observations to give to mice.
     n.close.to.targets.mat <- matrix(NA, nrow = 11, ncol = 11)
+    shift.decile <- NA
 
     for (steps.intermediate.targets in 0:10){ # We make 10% steps from empirical targets to experimental median features
       candidate.intermediate.features <- targets.empirical - (targets.diff * steps.intermediate.targets) / 10
@@ -1451,6 +1452,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
     
     final.RMSD.tol
     final.intermediate.features
+    shift.decile
     
     
     # 4. Calculate RMSD values for these intermediate.features and the RMSD.tol found
