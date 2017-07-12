@@ -1436,6 +1436,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
         large.enough.training.df <- n.close.to.targets >= min.givetomice
         if (large.enough.training.df == TRUE){
           if (RMSD.tol < candidate.RMSD.tol){
+            candidate.RMSD.tol <- RMSD.tol # Updating the candidate.RMSD.tol
             final.RMSD.tol <- RMSD.tol
             final.intermediate.features <- candidate.intermediate.features
             shift.decile <- steps.intermediate.targets # 0 means targets.empirical; 10 means experim.median.features
