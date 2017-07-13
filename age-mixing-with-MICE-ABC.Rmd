@@ -1421,15 +1421,21 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
     # 3. Find intermediate features and RMSD.tol for which n.close.to.targets >= min.givetomice
     targets.diff <- targets.empirical - experim.median.features # First we determine how far the empirical targets are away from the median features of the executed experiments
     candidate.RMSD.tol <- Inf # Initially, we assume that the RMSD cut-off needs to be infinitely large to have sufficient observations to give to mice.
-    n.close.to.targets.mat <- matrix(NA, nrow = 11, ncol = 11)
+    
+    n.steps.targets <- 40
+    n.steps.RMSD.tol <- 40
+    
+    n.close.to.targets.mat <- matrix(NA, nrow = n.steps.targets+1, ncol = n.steps.RMSD.tol+1)
     final.RMSD.tol <- NA
     final.intermediate.features <- NA
     shift.decile <- NA
+    
+   
 
-    for (steps.intermediate.targets in 0:10){ # We make 10% steps from empirical targets to experimental median features
-      candidate.intermediate.features <- targets.empirical - (targets.diff * steps.intermediate.targets) / 10
-      for (steps.RMSD.tol in 0:10){ # We make 10% steps from RMSD.tol.max to RMSD.tol = 0
-        RMSD.tol <- RMSD.tol.max * (10 - steps.RMSD.tol) / 10
+    for (steps.intermediate.targets in 0:n.steps.targets){ # We make 10% steps from empirical targets to experimental median features
+      candidate.intermediate.features <- targets.empirical - (targets.diff * steps.intermediate.targets) / n.steps.targets
+      for (steps.RMSD.tol in 0:n.steps.RMSD.tol){ # We make 10% steps from RMSD.tol.max to RMSD.tol = 0
+        RMSD.tol <- RMSD.tol.max * (n.steps.RMSD.tol - steps.RMSD.tol) / n.steps.RMSD.tol
         
         sum.sq.rel.dist <- rep(0, nrow(sim.results.with.design.df))
         for (i in 1:length(candidate.intermediate.features)) {
