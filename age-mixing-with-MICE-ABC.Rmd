@@ -1382,10 +1382,10 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
   rel.dist.cutoff <- Inf # initially it is infinitely large, but in later iterations it shrinks
   sim.results.with.design.df <- NULL # Will be growing with each wave (appending)
   sim.results.with.design.df.selected <- NULL
-  intermediate.features <- NULL
+  final.intermediate.features <- NULL
   
   # 1. Start loop of waves, based on comparing intermediate features with targets.empirical
-  while (wave <= maxwaves & intermediate.features != targets.empirical){
+  while (wave <= maxwaves & !identical(final.intermediate.features, targets.empirical)){
     if (wave == 1){
       # 2. Initial, naive results, based on Sobol sequences
       range.width <- uls - lls
@@ -1400,7 +1400,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
                                            seed_count = 0,
                                            n_cluster = 8)
     # save(sim.results.simple, file = "/Users/delvaw/Documents/MiceABC/sim.results.simple.RData")
-    load(file = "sim.results.simple.RData")
+    # load(file = "sim.results.simple.RData")
     
     new.sim.results.with.design.df <- as.data.frame(cbind(experiments,
                                                           sim.results.simple))
@@ -1410,13 +1410,20 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
     names(new.sim.results.with.design.df) <- c(x.names, y.names)
     
     new.sim.results.with.design.df <- new.sim.results.with.design.df %>% dplyr::filter(complete.cases(.))
-    sim.results.with.design.df <- rbind(sim.results.with.design.df, new.sim.results.with.design.df)
+    sim.results.with.design.df <- rbind(dplyr::select(sim.results.with.design.df,
+                                                      -contains("RMSD")),
+                                        new.sim.results.with.design.df)
+    
+    # save(sim.results.with.design.df, file = "/Users/delvaw/Documents/MiceABC/sim.results.with.design.df.RData")
+
     experim.median.features <- med(dplyr::select(sim.results.with.design.df, contains("y.")))$median
     
     # 3. Find intermediate features and RMSD.tol for which n.close.to.targets >= min.givetomice
     targets.diff <- targets.empirical - experim.median.features # First we determine how far the empirical targets are away from the median features of the executed experiments
     candidate.RMSD.tol <- Inf # Initially, we assume that the RMSD cut-off needs to be infinitely large to have sufficient observations to give to mice.
     n.close.to.targets.mat <- matrix(NA, nrow = 11, ncol = 11)
+    final.RMSD.tol <- NA
+    final.intermediate.features <- NA
     shift.decile <- NA
 
     for (steps.intermediate.targets in 0:10){ # We make 10% steps from empirical targets to experimental median features
@@ -1450,6 +1457,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
       }
     }
     
+    n.close.to.targets.mat
     final.RMSD.tol
     final.intermediate.features
     shift.decile
@@ -1476,14 +1484,14 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
     calibration.list$selected.experiments[[wave]] <- sim.results.with.design.df.selected
     
     # 7. Put intermediate features in dataframe format
-    intermediate.features.df <- as.data.frame(matrix(intermediate.features, ncol = length(intermediate.features)))
-    names(intermediate.features.df) <- y.names
+    final.intermediate.features.df <- as.data.frame(matrix(final.intermediate.features, ncol = length(final.intermediate.features)))
+    names(final.intermediate.features.df) <- y.names
     
     # 8. Prepare dataframe to give to mice: selected experiments plus intermediate features
     df.give.to.mice <- dplyr::full_join(dplyr::select(sim.results.with.design.df.selected,
                                                       -contains("RMSD")), # adding target to training dataset
-                                        intermediate.features.df,
-                                        by = names(intermediate.features.df)) # "by" statement added to avoid printing message of the variables were used for joining
+                                        final.intermediate.features.df,
+                                        by = names(final.intermediate.features.df)) # "by" statement added to avoid printing message of the variables were used for joining
     
     # We are transforming parameters that are necessarily strictly positive: sigma, gamma.a, gamma.b.
     # We could also consider a similar transformation for input parameters that we think should be negative (e.g. formation.hazard.agegapry.gap_factor_man_exp) but for now not yet
@@ -1532,21 +1540,21 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
     
     predictorMatrix[1:length(x.names), ] <- 0 # First we "empty" the relevant rows, then we refill them.
     # We are currently not allowing input variables to be predicted by other predictor variables. Only via output variables. We could change this at a later stage.
-    predictorMatrix[1, x.offset + 11:12] <- 1 # relative susceptibility in young women is predicted by HIV prevalence in young men and women
+    predictorMatrix[1, x.offset + 10:11] <- 1 # relative susceptibility in young women is predicted by HIV prevalence in young men and women
     predictorMatrix[2, x.offset + 3] <- 1 # agescale predicted by slope
     predictorMatrix[3, x.offset + c(1, 3, 6)] <- 1 # mean of the person-specific age gap preferences is predicted by slope, intercept and AAD
     predictorMatrix[4, x.offset + c(2, 4, 5)] <- 1 # sd of the person-specific age gap preferences is predicted by SD, WSD, BSD
-    predictorMatrix[5, x.offset + c(7, 8, 10, 14, 17)] <- 1 # man gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
-    predictorMatrix[6, x.offset + c(7, 8, 10, 13, 17)] <- 1 # woman gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.women, exp(growthrate)
-    predictorMatrix[7, x.offset + c(7, 8, 10, 14, 17)] <- 1 # man gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
-    predictorMatrix[8, x.offset + c(7, 8, 10, 13, 17)] <- 1 # woman gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
-    predictorMatrix[9, x.offset + c(2, 4, 5, 7, 8, 15, 16, 17)] <- 1 # formation.hazard.agegapry.gap_factor_x_exp is predicted by population growth, age gap variance, hiv prevalence,
-    predictorMatrix[10, x.offset + c(7, 8, 10, 13, 14, 17)] <- 1 # baseline formation hazard predicted by HIV prevalence, cp, degree distrib. HIV prevalence.
-    predictorMatrix[11, x.offset + c(7, 8, 10, 13, 14, 17)] <- 1 # numrel man penalty is predicted by degree distrib, cp, prev, popgrowth
-    predictorMatrix[12, x.offset + c(7, 8, 10, 13, 14, 17)] <- 1 # # numrel woman penalty is predicted by degree distrib, cp, prev, popgrowth
-    predictorMatrix[13, x.offset + 17] <- 1 # conception.alpha_base is predicted by popgrowth
-    predictorMatrix[14, x.offset + c(7, 8, 10, 17)] <- 1 # baseline dissolution hazard predicted by degree distrib, cp, popgrowth
-    predictorMatrix[15, x.offset + c(7, 8, 10, 17)] <- 1 # age effect on dissolution hazard predicted by degree distrib, cp, popgrowth, HIV prev in older people (maybe?)
+    predictorMatrix[5, x.offset + c(7, 8, 9, 13, 16)] <- 1 # man gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    predictorMatrix[6, x.offset + c(7, 8, 9, 12, 16)] <- 1 # woman gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.women, exp(growthrate)
+    predictorMatrix[7, x.offset + c(7, 8, 9, 13, 16)] <- 1 # man gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    predictorMatrix[8, x.offset + c(7, 8, 9, 12, 16)] <- 1 # woman gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    predictorMatrix[9, x.offset + c(2, 4, 5, 7, 8, 14, 15, 16)] <- 1 # formation.hazard.agegapry.gap_factor_x_exp is predicted by population growth, age gap variance, hiv prevalence,
+    predictorMatrix[10, x.offset + c(7, 8, 9, 12, 13, 16)] <- 1 # baseline formation hazard predicted by HIV prevalence, cp, degree distrib. HIV prevalence.
+    predictorMatrix[11, x.offset + c(7, 8, 9, 12, 13, 16)] <- 1 # numrel man penalty is predicted by degree distrib, cp, prev, popgrowth
+    predictorMatrix[12, x.offset + c(7, 8, 9, 12, 13, 16)] <- 1 # # numrel woman penalty is predicted by degree distrib, cp, prev, popgrowth
+    predictorMatrix[13, x.offset + 16] <- 1 # conception.alpha_base is predicted by popgrowth
+    predictorMatrix[14, x.offset + c(7, 8, 9, 16)] <- 1 # baseline dissolution hazard predicted by degree distrib, cp, popgrowth
+    predictorMatrix[15, x.offset + c(7, 8, 9, 16)] <- 1 # age effect on dissolution hazard predicted by degree distrib, cp, popgrowth, HIV prev in older people (maybe?)
     
     # NOTE: As it stands, each output statistic is predicted by ALL input and ALL other output statistics. That may not be a great idea, or even possible, if there is collinearity.
     
@@ -1572,7 +1580,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
   }
   
   # 13. Check if intermediate features have converged to empirical targests (if not, then maxwaves is reached)
-  if (intermediate.features == targets.empirical){
+  if (final.intermediate.features == targets.empirical){
     # 14. Do more "traditional mice optimisation" for the remaining waves
     
   }
