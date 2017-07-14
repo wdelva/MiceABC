@@ -1368,13 +1368,13 @@ root.path <- dirname(getwd())
 
 MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
                                  RMSD.tol.max = 2,
-                                 min.givetomice = 64,
-                                 n.experiments = 256,
+                                 min.givetomice = 128,
+                                 n.experiments = 1024,
                                  lls = c(1,  0.12, -0.3, 2.5, 0.1, 0.1, 20, 20, -0.8, 2, -0.35, -0.35, -3.6, -0.8, -0.16),
                                  uls = c(1.2, 0.37, 0.3, 3.5, 0.4, 0.4, 66, 66, -0.25, 3.9, -0.1, -0.1, -1.4, -0.3,  -0.001),
                                  model = simpact.wrapper,
                                  maxit = 50,
-                                 maxwaves = 4){
+                                 maxwaves = 8){
   # 0. Start the clock
   ptm <- proc.time()
   calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
@@ -1399,8 +1399,8 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
                                            actual.input.matrix = experiments,
                                            seed_count = 0,
                                            n_cluster = 8)
-    # save(sim.results.simple, file = "/Users/delvaw/Documents/MiceABC/sim.results.simple.RData")
-    # load(file = "sim.results.simple.RData")
+    save(sim.results.simple, file = paste0(root.path,"/MiceABC/sim.results.simple.RData"))
+    load(file = "sim.results.simple.RData")
     
     new.sim.results.with.design.df <- as.data.frame(cbind(experiments,
                                                           sim.results.simple))
@@ -1411,7 +1411,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
     
     new.sim.results.with.design.df <- new.sim.results.with.design.df %>% dplyr::filter(complete.cases(.))
     
-    if (is.null(sim.results.with.design.df)){ # TRUE for the first wave only
+    if (wave == 1){ # TRUE for the first wave only
       sim.results.with.design.df <- rbind(sim.results.with.design.df,
                                           new.sim.results.with.design.df)
     } else {
