@@ -517,7 +517,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   
   
   degree.df.maker <- function (dataframe.df, agegroup = c(15, 30), hivstatus = 0, 
-                               survey.time = 40, window.width = 1, gender.degree = "female", 
+                               survey.time = 15, window.width = 1, gender.degree = "female", 
                                only.new = TRUE) 
   {
     dataframe.rels.df <- dataframe.df
@@ -634,7 +634,7 @@ simpact.wrapper <- function(inputvector = input.vector){ # This function does no
   destDir <- paste0(root.path, "/temp")
   age.distr <- agedistr.creator(shape = 5, scale = 65)
   cfg.list <- input.params.creator(population.eyecap.fraction = 0.2, #0.21,#1,
-                                   population.simtime = 35, #40,
+                                   population.simtime = 15, #40,
                                    population.nummen = 2500,
                                    population.numwomen = 2500,
                                    hivseed.time = 10,
@@ -1303,7 +1303,7 @@ test.inputvectorplusseed <- c(1, target.vector.master)
 # 16. hiv.prev.35.44.men (0.24)
 # 17. exp(growthrate)) (1.01)
 
-targets.empirical <- c(4, 4, 0.7, 3, 1.5, -1, 1.29, 0.66, 0.134, 0.2, 0.1, 0.42, 0.17, 0.37, 0.24, 1.01)
+targets.empirical <- c(4, 4, 0.7, 3, 1.5, -1, 1.29, 0.66, 0.134, 0.05, 0.03, 0.1, 0.05, 0.08, 0.09, 1.01)
 targets.master <- c(4.0651198,
                     3.5641622,
                     0.5463380,
@@ -1323,8 +1323,15 @@ targets.master <- c(4.0651198,
 
 
 targets.diff <- targets.empirical - targets.master
-
-
+# Filling default values, to facilitate interactive testing of incremental mice function
+RMSD.tol.max <- 1
+min.givetomice <- 80
+n.experiments <- 400
+lls <- c(1,  0.12, -0.3, 2.5, 0.1, 0.1, 20, 20, -0.8, 2, -0.35, -0.35, -3.6, -0.8, -0.16)
+uls <- c(1.2, 0.37, 0.3, 3.5, 0.4, 0.4, 66, 66, -0.25, 3.9, -0.1, -0.1, -1.4, -0.3,  -0.001)
+model <- simpact.wrapper
+maxit <- 50
+maxwaves <- 8
   
 # design.matrix.control <- matrix(rep(target.vector.master, reps), nrow = reps, byrow = TRUE)
 # 
@@ -1367,7 +1374,7 @@ This is not straightforward because we do not know, initally, how changes in par
 root.path <- dirname(getwd())
 
 MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
-                                 RMSD.tol.max = 2,
+                                 RMSD.tol.max = 1,
                                  min.givetomice = 128,
                                  n.experiments = 1024,
                                  lls = c(1,  0.12, -0.3, 2.5, 0.1, 0.1, 20, 20, -0.8, 2, -0.35, -0.35, -3.6, -0.8, -0.16),
@@ -1380,9 +1387,15 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
   calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
   wave <- 1 # initiating the loop of waves of simulations (one iteration is one wave)
   rel.dist.cutoff <- Inf # initially it is infinitely large, but in later iterations it shrinks
-  sim.results.with.design.df <- NULL # Will be growing with each wave (appending)
-  sim.results.with.design.df.selected <- NULL
-  final.intermediate.features <- NULL
+  
+  x.names <- paste0("x.", seq(1:15))
+  y.names <- paste0("y.", seq(1:16))
+
+  sim.results.with.design.df <- data.frame(matrix(vector(), 0, 31,
+                                                  dimnames = list(c(), c(x.names, y.names))),
+                                           stringsAsFactors = FALSE) # Will be growing with each wave (appending)
+  # sim.results.with.design.df.selected I think this does not need to be initiated
+  final.intermediate.features <- rep(NA, times = length(targets.empirical))
   
   # 1. Start loop of waves, based on comparing intermediate features with targets.empirical
   while (wave <= maxwaves & !identical(final.intermediate.features, targets.empirical)){
@@ -1399,8 +1412,8 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
                                            actual.input.matrix = experiments,
                                            seed_count = 0,
                                            n_cluster = 8)
-    save(sim.results.simple, file = paste0(root.path,"/MiceABC/sim.results.simple.RData"))
-    load(file = "sim.results.simple.RData")
+    #save(sim.results.simple, file = paste0(root.path,"/MiceABC/sim.results.simple.RData"))
+    #load(file = "sim.results.simple.RData")
     
     new.sim.results.with.design.df <- as.data.frame(cbind(experiments,
                                                           sim.results.simple))
@@ -1421,10 +1434,10 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
     }
 
     
-    # save(sim.results.with.design.df, file = "/Users/delvaw/Documents/MiceABC/sim.results.with.design.df.RData")
+    # save(sim.results.with.design.df, file = "/Users/wimdelva/Documents/MiceABC/sim.results.with.design.df.RData")
     # load(file = "/Users/delvaw/Documents/MiceABC/sim.results.with.design.df.RData")
 
-    experim.median.features <- med(dplyr::select(sim.results.with.design.df, contains("y.")))$median
+    experim.median.features <- med(dplyr::select(sim.results.with.design.df, contains("y.")), mustdith = TRUE)$median
     
     # 3. Find intermediate features and RMSD.tol for which n.close.to.targets >= min.givetomice
     targets.diff <- targets.empirical - experim.median.features # First we determine how far the empirical targets are away from the median features of the executed experiments
@@ -1582,8 +1595,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
                       method = "norm",
                       defaultMethod = "norm",
                       maxit = maxit,
-                      printFlag = FALSE,
-                      data.init = NULL)
+                      printFlag = FALSE)
     
     # 11. Turn mice proposals into a new matrix of experiments
     experiments <- unlist(mice.test$imp) %>% matrix(., byrow = FALSE, ncol = length(x.names))
@@ -1614,7 +1626,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
       
       new.sim.results.with.design.df <- new.sim.results.with.design.df %>% dplyr::filter(complete.cases(.))
       
-      if (is.null(sim.results.with.design.df)){ # TRUE for the first wave only
+      if (nrow(sim.results.with.design.df)==0){ # TRUE for the first wave only
         sim.results.with.design.df <- rbind(sim.results.with.design.df,
                                             new.sim.results.with.design.df)
       } else {
@@ -1804,8 +1816,7 @@ MICE_ABC.incremental <- function(targets.empirical = targets.empirical,
                         method = "norm",
                         defaultMethod = "norm",
                         maxit = maxit,
-                        printFlag = FALSE,
-                        data.init = NULL)
+                        printFlag = FALSE)
       
       # 11. Turn mice proposals into a new matrix of experiments
       experiments <- unlist(mice.test$imp) %>% matrix(., byrow = FALSE, ncol = length(x.names))
