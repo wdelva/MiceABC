@@ -12,9 +12,19 @@ MaC.incremental <- function(targets.empirical = targets.empirical,
   calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
   wave <- 1 # initiating the loop of waves of simulations (one iteration is one wave)
   rel.dist.cutoff <- Inf # initially it is infinitely large, but in later iterations it shrinks
-  sim.results.with.design.df <- NULL # Will be growing with each wave (appending)
-  sim.results.with.design.df.selected <- NULL
-  final.intermediate.features <- NULL
+  #sim.results.with.design.df <- NULL # Will be growing with each wave (appending)
+  #sim.results.with.design.df.selected <- NULL
+  #final.intermediate.features <- NULL
+
+
+
+  x.names <- paste0("x.", seq(1:15))
+  y.names <- paste0("y.", seq(1:16))
+  sim.results.with.design.df <- data.frame(matrix(vector(), 0, 31,
+                                                  dimnames = list(c(), c(x.names, y.names))),
+                                           stringsAsFactors = FALSE) # Will be growing with each wave (appending)
+  # sim.results.with.design.df.selected I think this does not need to be initiated
+  final.intermediate.features <- rep(NA, times = length(targets.empirical))
 
   # 1. Start loop of waves, based on comparing intermediate features with targets.empirical
   while (wave <= maxwaves & !identical(final.intermediate.features, targets.empirical)){
@@ -43,7 +53,7 @@ MaC.incremental <- function(targets.empirical = targets.empirical,
 
     new.sim.results.with.design.df <- new.sim.results.with.design.df %>% dplyr::filter(complete.cases(.))
 
-    if (is.null(sim.results.with.design.df)){ # TRUE for the first wave only
+    if (wave==1){ # TRUE for the first wave only
       sim.results.with.design.df <- rbind(sim.results.with.design.df,
                                           new.sim.results.with.design.df)
     } else {
@@ -56,7 +66,7 @@ MaC.incremental <- function(targets.empirical = targets.empirical,
     # save(sim.results.with.design.df, file = "/Users/delvaw/Documents/MiceABC/sim.results.with.design.df.RData")
     # load(file = "/Users/delvaw/Documents/MiceABC/sim.results.with.design.df.RData")
 
-    experim.median.features <- med(dplyr::select(sim.results.with.design.df, contains("y.")))$median
+    experim.median.features <- med(dplyr::select(sim.results.with.design.df, contains("y.")), mustdith = TRUE)$median
 
     # 3. Find intermediate features and RMSD.tol for which n.close.to.targets >= min.givetomice
     targets.diff <- targets.empirical - experim.median.features # First we determine how far the empirical targets are away from the median features of the executed experiments
@@ -214,8 +224,7 @@ MaC.incremental <- function(targets.empirical = targets.empirical,
                       method = "norm",
                       defaultMethod = "norm",
                       maxit = maxit,
-                      printFlag = FALSE,
-                      data.init = NULL)
+                      printFlag = FALSE)
 
     # 11. Turn mice proposals into a new matrix of experiments
     experiments <- unlist(mice.test$imp) %>% matrix(., byrow = FALSE, ncol = length(x.names))
@@ -246,7 +255,7 @@ MaC.incremental <- function(targets.empirical = targets.empirical,
 
       new.sim.results.with.design.df <- new.sim.results.with.design.df %>% dplyr::filter(complete.cases(.))
 
-      if (is.null(sim.results.with.design.df)){ # TRUE for the first wave only
+      if (nrow(sim.results.with.design.df)==0){ # TRUE for the first wave only
         sim.results.with.design.df <- rbind(sim.results.with.design.df,
                                             new.sim.results.with.design.df)
       } else {
@@ -436,8 +445,7 @@ MaC.incremental <- function(targets.empirical = targets.empirical,
                         method = "norm",
                         defaultMethod = "norm",
                         maxit = maxit,
-                        printFlag = FALSE,
-                        data.init = NULL)
+                        printFlag = FALSE)
 
       # 11. Turn mice proposals into a new matrix of experiments
       experiments <- unlist(mice.test$imp) %>% matrix(., byrow = FALSE, ncol = length(x.names))
