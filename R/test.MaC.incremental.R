@@ -1,4 +1,4 @@
-setwd("/Users/delvaw/Documents/MiceABC/R")
+setwd("/Users/wimdelva/Documents/MiceABC/R")
 source("simpact.wrapper.R")
 source("simpact.parallel.R")
 source("MaC.incremental.R")
