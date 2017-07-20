@@ -66,7 +66,7 @@ MaC.incremental <- function(targets.empirical = targets.empirical,
     # save(sim.results.with.design.df, file = "/Users/delvaw/Documents/MiceABC/sim.results.with.design.df.RData")
     # load(file = "/Users/delvaw/Documents/MiceABC/sim.results.with.design.df.RData")
 
-    experim.median.features <- med(dplyr::select(sim.results.with.design.df, contains("y.")), mustdith = TRUE)$median
+    experim.median.features <- l1median(dplyr::select(sim.results.with.design.df, contains("y.")))
 
     # 3. Find intermediate features and RMSD.tol for which n.close.to.targets >= min.givetomice
     targets.diff <- targets.empirical - experim.median.features # First we determine how far the empirical targets are away from the median features of the executed experiments
