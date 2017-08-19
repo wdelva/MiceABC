@@ -5,6 +5,8 @@ dummy.MaC.incremental <- function(targets.empirical = dummy.targets.empirical,
                             lls,
                             uls,
                             model = simpact.wrapper,
+                            strict.positive.params,
+                            predictorMatrix,
                             maxit = 50,
                             maxwaves = 4){
   # 0. Start the clock
@@ -170,25 +172,28 @@ dummy.MaC.incremental <- function(targets.empirical = dummy.targets.empirical,
 
     # We are transforming parameters that are necessarily strictly positive: sigma, gamma.a, gamma.b.
     # We could also consider a similar transformation for input parameters that we think should be negative (e.g. formation.hazard.agegapry.gap_factor_man_exp) but for now not yet
-    strict.positive.params <- c(1:4)
+    # strict.positive.params <- c(1:4) # Move to the list of arguments of the function
     df.give.to.mice[, strict.positive.params] <- log(df.give.to.mice[, strict.positive.params])
 
     # 9. Override default predictorMatrix with a sparser matrix
     # Let's think a bit more carefully about which variables should be allowed as input for which input parameters.
     # IN THE FUTURE THIS COULD BE AUTOMATED WITH VARIABLE SELECTION ALGORITHMS.
-    predictorMatrix <- (1 - diag(1, ncol(df.give.to.mice))) # This is the default matrix.
-    # # Let's now modify the first 15 rows of this matrix, corresponding to the indicators of predictor variables for the input variables. In brackets the values for the master model.
-
-    predictorMatrix[1:length(x.names), ] <- 0 # First we "empty" the relevant rows, then we refill them.
+    # predictorMatrix <- (1 - diag(1, ncol(df.give.to.mice))) # This is the default matrix.
+    # # # Let's now modify the first 15 rows of this matrix, corresponding to the indicators of predictor variables for the input variables. In brackets the values for the master model.
+    #
+    # predictorMatrix[1:length(x.names), ] <- 0 # First we "empty" the relevant rows, then we refill them.
     # # We are currently not allowing input variables to be predicted by other predictor variables. Only via output variables. We could change this at a later stage.
-    predictorMatrix[1, x.offset + c(3, 4)] <- 1 # IQR and range
-    predictorMatrix[2, x.offset + 2:4] <- 1 # agescale predicted by slope
-    predictorMatrix[3, x.offset + 2:4] <- 1 # mean of the person-specific age gap preferences is predicted by slope, intercept and AAD
-    predictorMatrix[4, x.offset + 2:4] <- 1 # sd of the person-specific age gap preferences is predicted by SD, WSD, BSD
-    predictorMatrix[5, c(2, 3)] <- 1 # man gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
-    predictorMatrix[6, 2:4] <- 1 # woman gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.women, exp(growthrate)
-    predictorMatrix[7, 2:4] <- 1 # man gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
-    predictorMatrix[8, 2:4] <- 1 # woman gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+    # predictorMatrix[1, x.offset + c(3, 4)] <- 1
+    # predictorMatrix[2, x.offset + 2:4] <- 1
+    # predictorMatrix[3, x.offset + 2:4] <- 1
+    # predictorMatrix[4, x.offset + 2:4] <- 1
+    # predictorMatrix[5, c(2, 3)] <- 1
+    # predictorMatrix[6, 2:4] <- 1
+    # predictorMatrix[7, 2:4] <- 1
+    # predictorMatrix[8, 2:4] <- 1
+
+
+
     # predictorMatrix[9, x.offset + c(2, 4, 5, 7, 8, 14, 15, 16)] <- 1 # formation.hazard.agegapry.gap_factor_x_exp is predicted by population growth, age gap variance, hiv prevalence,
     # predictorMatrix[10, x.offset + c(7, 8, 9, 12, 13, 16)] <- 1 # baseline formation hazard predicted by HIV prevalence, cp, degree distrib. HIV prevalence.
     # predictorMatrix[11, x.offset + c(7, 8, 9, 12, 13, 16)] <- 1 # numrel man penalty is predicted by degree distrib, cp, prev, popgrowth
@@ -371,25 +376,25 @@ dummy.MaC.incremental <- function(targets.empirical = dummy.targets.empirical,
 
       # We are transforming parameters that are necessarily strictly positive: sigma, gamma.a, gamma.b.
       # We could also consider a similar transformation for input parameters that we think should be negative (e.g. formation.hazard.agegapry.gap_factor_man_exp) but for now not yet
-      strict.positive.params <- c(1:4)
+      # strict.positive.params <- c(1:4)
       df.give.to.mice[, strict.positive.params] <- log(df.give.to.mice[, strict.positive.params])
 
       # 9. Override default predictorMatrix with a sparser matrix
       # Let's think a bit more carefully about which variables should be allowed as input for which input parameters.
       # IN THE FUTURE THIS COULD BE AUTOMATED WITH VARIABLE SELECTION ALGORITHMS.
-      predictorMatrix <- (1 - diag(1, ncol(df.give.to.mice))) # This is the default matrix.
-      # Let's now modify the first 15 rows of this matrix, corresponding to the indicators of predictor variables for the input variables. In brackets the values for the master model.
-
-      predictorMatrix[1:length(x.names), ] <- 0 # First we "empty" the relevant rows, then we refill them.
-      # We are currently not allowing input variables to be predicted by other predictor variables. Only via output variables. We could change this at a later stage.
-      predictorMatrix[1, x.offset + c(3, 4)] <- 1 # IQR and range
-      predictorMatrix[2, x.offset + 2:4] <- 1 # agescale predicted by slope
-      predictorMatrix[3, x.offset + 2:4] <- 1 # mean of the person-specific age gap preferences is predicted by slope, intercept and AAD
-      predictorMatrix[4, x.offset + 2:4] <- 1 # sd of the person-specific age gap preferences is predicted by SD, WSD, BSD
-      predictorMatrix[5, c(2, 3)] <- 1 # man gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
-      predictorMatrix[6, 2:4] <- 1 # woman gamma a predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.women, exp(growthrate)
-      predictorMatrix[7, 2:4] <- 1 # man gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
-      predictorMatrix[8, 2:4] <- 1 # woman gamma b predicted by gamma shape.male, scale.male, pp.cp, hiv.prev.25.34.men, exp(growthrate)
+      # predictorMatrix <- (1 - diag(1, ncol(df.give.to.mice))) # This is the default matrix.
+      # # Let's now modify the first 15 rows of this matrix, corresponding to the indicators of predictor variables for the input variables. In brackets the values for the master model.
+      #
+      # predictorMatrix[1:length(x.names), ] <- 0 # First we "empty" the relevant rows, then we refill them.
+      # # We are currently not allowing input variables to be predicted by other predictor variables. Only via output variables. We could change this at a later stage.
+      # predictorMatrix[1, x.offset + c(3, 4)] <- 1
+      # predictorMatrix[2, x.offset + 2:4] <- 1
+      # predictorMatrix[3, x.offset + 2:4] <- 1
+      # predictorMatrix[4, x.offset + 2:4] <- 1
+      # predictorMatrix[5, c(2, 3)] <- 1
+      # predictorMatrix[6, 2:4] <- 1
+      # predictorMatrix[7, 2:4] <- 1
+      # predictorMatrix[8, 2:4] <- 1
       # NOTE: As it stands, each output statistic is predicted by ALL input and ALL other output statistics. That may not be a great idea, or even possible, if there is collinearity.
 
       print(c(nrow(df.give.to.mice), "nrows to give to mice"), quote = FALSE)
