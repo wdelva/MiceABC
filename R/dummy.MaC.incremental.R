@@ -4,11 +4,12 @@ dummy.MaC.incremental <- function(targets.empirical = dummy.targets.empirical,
                             n.experiments = 256,
                             lls,
                             uls,
-                            model = simpact.wrapper,
+                            model = VEME.wrapper, # simpact.wrapper,
                             strict.positive.params,
                             predictorMatrix,
                             maxit = 50,
-                            maxwaves = 4){
+                            maxwaves = 4,
+                            n_cluster = n_cluster){
   # 0. Start the clock
   ptm <- proc.time()
   calibration.list <- list() # initiating the list where all the output of MiceABC will be stored
@@ -18,7 +19,11 @@ dummy.MaC.incremental <- function(targets.empirical = dummy.targets.empirical,
   #sim.results.with.design.df.selected <- NULL
   #final.intermediate.features <- NULL
 
-  input.vector.length <- max(unique(na.omit(as.numeric(unlist(strsplit(unlist(paste0(deparse(model), collapse = " ")), "[^0-9]+"))))))
+  modelstring <- unlist(paste0(deparse(model), collapse = " "))
+  input.vector.length <- max(unique(na.omit(as.numeric(gsubfn::strapplyc(modelstring, "[[](\\d+)[]]", simplify = TRUE))))) - 1 # minus one because the first input parameter is the random seed
+
+
+  # input.vector.length <- max(unique(na.omit(as.numeric(unlist(strsplit(unlist(paste0(deparse(model), collapse = " ")), "[^0-9]+"))))))
   output.vector.length <- length(targets.empirical)
 
 
@@ -47,7 +52,7 @@ dummy.MaC.incremental <- function(targets.empirical = dummy.targets.empirical,
     sim.results.simple <- simpact.parallel(model = model,
                                            actual.input.matrix = experiments,
                                            seed_count = 0,
-                                           n_cluster = 8)
+                                           n_cluster = n_cluster)
     # save(sim.results.simple, file = "/Users/delvaw/Documents/MiceABC/sim.results.simple.RData")
     # load(file = "sim.results.simple.RData")
 
@@ -240,7 +245,7 @@ dummy.MaC.incremental <- function(targets.empirical = dummy.targets.empirical,
       sim.results.simple <- simpact.parallel(model = model,
                                              actual.input.matrix = experiments,
                                              seed_count = 0,
-                                             n_cluster = 8)
+                                             n_cluster = n_cluster)
       # save(sim.results.simple, file = "/Users/delvaw/Documents/MiceABC/sim.results.simple.RData")
       # load(file = "sim.results.simple.RData")
 
