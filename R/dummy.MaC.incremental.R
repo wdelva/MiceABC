@@ -90,7 +90,7 @@ dummy.MaC.incremental <- function(targets.empirical = dummy.targets.empirical,
     ############
 
 
-    n.steps.targets <- 100
+    n.steps.targets <- 10
     n.steps.RMSD.tol <- 100
 
     n.close.to.targets.mat <- matrix(NA, nrow = n.steps.targets+1, ncol = n.steps.RMSD.tol+1)
