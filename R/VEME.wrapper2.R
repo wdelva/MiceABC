@@ -51,10 +51,10 @@ VEME.wrapper2 <- function(inputvector = input.vector){ # This function does not 
                       error = simpact.errFunction)
 
   if (length(results) == 0){
-    outputvector <- rep(NA, 18)
+    outputvector <- rep(NA, 17)   # 19 if we are using the master model
   } else {
     if (as.numeric(results["eventsexecuted"]) >= (as.numeric(cfg["population.maxevents"]) - 1)) {
-      outputvector <- rep(NA, 18)
+      outputvector <- rep(NA, 17) # 19 if we are using the master model
     } else {
       datalist.agemix <- readthedata(results)
       agemix.df <- agemix.df.maker(datalist.agemix)
@@ -154,9 +154,9 @@ VEME.wrapper2 <- function(inputvector = input.vector){ # This function does not 
       #######
       # And now we add HIV incidence at two selected time points
       #######
-      # inc.times <- seq(from = datalist.agemix$itable$population.simtime[1] - 5,
-      #                  by = 5,
-      #                  to = datalist.agemix$itable$population.simtime[1])
+      # inc.times <- seq(from = 11, #datalist.agemix$itable$population.simtime[1] - 5,
+      #                  by = 1, #5,
+      #                  to = datalist.agemix$itable$population.simtime[1]) # 25, which is a 5-year forward projection
       # inc.vector <- rep(NA, length(inc.times))
       # for (inc.time in (1:length(inc.times))){
       #
@@ -166,9 +166,8 @@ VEME.wrapper2 <- function(inputvector = input.vector){ # This function does not 
       #                                                only.active = "No")
       #   inc.vector[inc.time] <- inc.tibble$incidence[3]
       # }
-      # inc.ratio <- inc.vector[2] / inc.vector[1]
-      #
-      # inc.end <- inc.vector[2]
+
+
       inc.time <- datalist.agemix$itable$population.simtime[1]
       inc.tibble <- incidence.calculator(datalist = datalist.agemix,
                                          agegroup = c(0, 500), # Essentially incidence in the entire population
@@ -181,7 +180,8 @@ VEME.wrapper2 <- function(inputvector = input.vector){ # This function does not 
       # And transmission tree
       #######
 
-      recent.vs.old.nodetimes.ratio <- NA # Will be overwritten if it can be computed
+      recent.transmissions <- NA # Will be overwritten if it can be computed
+      recent.ratio <- NA # Will be overwritten if it can be computed
 
       transm.ls <- transmNetworkBuilder.baseline(datalist = datalist.agemix,
                                                  endpoint = datalist.agemix$itable$population.simtime[1])
@@ -211,7 +211,7 @@ VEME.wrapper2 <- function(inputvector = input.vector){ # This function does not 
           if (length(transnetwork$parent) > 1){ # Let's start with only small networks
             epi.tree <- epi2tree2(transnetwork)
             tree.dat.full <- simSeq(epi.tree,
-                                    l = 100,
+                                    l = 1000,
                                     bf = freq,
                                     #rootseq = hiv.seq.env.short,
                                     type = "DNA",
@@ -234,17 +234,31 @@ VEME.wrapper2 <- function(inputvector = input.vector){ # This function does not 
             #
             tree.dat.pruned <- subset(tree.dat.full,
                                       subset = numbered.keep)# Only keep sequences of people that were alive at datalist.agemix$itable$population.simtime[1]
-            if (length(tree.dat.pruned) > 1){
+            if (length(tree.dat.pruned) > 2){
               tree.ml.pruned <- dist.ml(tree.dat.pruned, model = "F81", bf = freq) # F81
-              tree.sim.pruned <- upgma(tree.ml.pruned)
+              tree.sim.pruned <- nj(tree.ml.pruned) # phangorn::NJ(tree.ml.pruned) # changed upgma to neighbour-joining
 
               internal.node.times.element <- branching.times(tree.sim.pruned) # datalist.agemix$itable$hivseed.time[1] + branching.times(tree.sim.full) * (datalist.agemix$itable$population.simtime[1] - datalist.agemix$itable$hivseed.time[1])
               internal.node.times.unsorted <- c(internal.node.times, internal.node.times.element)
               internal.node.times.sorted <- sort(as.numeric(internal.node.times.unsorted))
               recent.transmissions <- sum(internal.node.times.sorted < 1 * overall.rate)
+              extant.infections <- length(tree.sim.pruned$tip.label)
+              recent.ratio <- recent.transmissions / extant.infections
               #less.recent.transmissions <- sum(internal.node.times.sorted >= 2 * overall.rate & internal.node.times.sorted < 4 * overall.rate)
               #recent.vs.old.nodetimes.ratio <- recent.transmissions / less.recent.transmissions
               # This can be a real number >=0, NaN (0/0) or Inf (num/0)
+
+              # Supposed we don't want the number of tips with short branchlenghts, but rather the average branch length of the tips
+              # mean.edge.length <- mean(tree.sim.pruned$edge.length)
+              #
+              #
+              # # tree$edge.length<-round(tree$edge.length,3)
+              # n <- length(tree.sim.pruned$tip.label)
+              # ee <- setNames(tree.sim.pruned$edge.length[sapply(1:n,function(x,y)
+              #   which(y==x),y=tree.sim.pruned$edge[,2])],tree.sim.pruned$tip.label)
+              #
+              # mean.tips.branch.length <- mean(as.numeric(ee))
+
             }
           }
         }
@@ -266,8 +280,10 @@ VEME.wrapper2 <- function(inputvector = input.vector){ # This function does not 
                         hiv.prev.35.44.women,
                         hiv.prev.35.44.men,
                         exp(growthrate),
-                        inc.end,
-                        recent.transmissions#recent.vs.old.nodetimes.ratio
+                        #inc.end,    # This is only part of the output in the master model
+                        recent.transmissions#,
+                        #recent.ratio
+                        #mean.tips.branch.length#recent.vs.old.nodetimes.ratio
                         )
     }
   }
