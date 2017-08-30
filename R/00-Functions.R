@@ -18,12 +18,12 @@ library(utils)
 library(phangorn)
 library(apTreeshape)
 
-hiv.seq.raw <- read_file("/Users/delvaw/Documents/MiceABC/K03455.txt")
-clean.hiv.seq <-  gsub("\n", "", hiv.seq.raw)
-save(clean.hiv.seq, file = "/Users/delvaw/Documents/MiceABC/clean.hiv.seq.RData")
-load(file = "/Users/delvaw/Documents/MiceABC/clean.hiv.seq.RData")
-hiv.seq.env <- substr(clean.hiv.seq, 6172,8742) # true c(6172,8742)
-hiv.seq.env.short <- substr(clean.hiv.seq, 6172, 6271)#8742) # true c(6172,8742)
+#hiv.seq.raw <- read_file("/Users/delvaw/Documents/MiceABC/K03455.txt")
+#clean.hiv.seq <-  gsub("\n", "", hiv.seq.raw)
+#save(clean.hiv.seq, file = "/Users/delvaw/Documents/MiceABC/clean.hiv.seq.RData")
+#load(file = "/Users/delvaw/Documents/MiceABC/clean.hiv.seq.RData")
+#hiv.seq.env <- substr(clean.hiv.seq, 6172,8742) # true c(6172,8742)
+#hiv.seq.env.short <- substr(clean.hiv.seq, 6172, 6271)#8742) # true c(6172,8742)
 
 freq <- c(0.3353293, 0.2035928, 0.2628077, (1 - sum(c(0.3353293, 0.2035928, 0.2628077))))
 rate <- list("a"=0.2, "b"=0.6, "c"=0.12,"d"=0.001, "e"=0.25, "f"=0.24)
@@ -179,9 +179,9 @@ root.path <- dirname(getwd())
 destDir <- paste0(root.path, "/temp")
 age.distr <- agedistr.creator(shape = 5, scale = 65)
 cfg.list <- input.params.creator(population.eyecap.fraction = 0.2, #0.21,#1,
-                                 population.simtime = 20, #40,
-                                 population.nummen = 500, #2500,
-                                 population.numwomen = 500, #2500,
+                                 population.simtime = 20, #20, #40,  #25 for validation. 20 for calibration
+                                 population.nummen = 1000, #2500,
+                                 population.numwomen = 1000, #2500,
                                  hivseed.time = 10,
                                  hivseed.type = "amount",
                                  hivseed.amount = 10, #30,
