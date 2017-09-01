@@ -45,6 +45,7 @@ library(nlme)
 library(lme4)
 library(boot)
 library(data.table)
+library(parallel)
 
 
 dummy.input.vector <- c(1.1, 0.25, 0, 3, 0.23, 0.23,  # what if 1.1 becomes 1.4
