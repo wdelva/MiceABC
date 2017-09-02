@@ -36,8 +36,8 @@ secondspassed
 
 # The partial parallel experiment
 ptm <- proc.time() # Start the clock
-cores_2_use <- detectCores()# - 1
-cl <- makeCluster(cores_2_use)
+# cores_2_use <- detectCores()# - 1
+cl <- makeCluster(8)# cores_2_use)
 clusterSetRNGStream(cl, 9956)
 clusterExport(cl, "formice.df")
 no.output<-clusterEvalQ(cl, library(mice))
