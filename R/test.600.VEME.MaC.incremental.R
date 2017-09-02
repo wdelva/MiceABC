@@ -186,7 +186,7 @@ test.VEME2.MaC.incremental <- dummy.MaC.incremental.parallel.mice(targets.empiri
                                         strict.positive.params = c(4:8),
                                         predictorMatrix = predictorMatrix,
                                         maxit = 5,
-                                        maxwaves = 2,
+                                        maxwaves = 6,
                                         n_cluster = 8) # 6
 #(round(l1median(head(test.MaC.incremental$selected.experiments[[length(test.MaC.incremental$selected.experiments)]]), 1), 99)[5:8] - dummy.targets.empirical[1:4]) / dummy.targets.empirical[1:4]
 #round(l1median(head(test.MaC.incremental$selected.experiments[[length(test.MaC.incremental$selected.experiments)]]), 1), 2)
