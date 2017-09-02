@@ -12,10 +12,14 @@
 
 #source("/Users/delvaw/Documents/MiceABC/R/VEME.wrapper.R")
 source("/Users/delvaw/Documents/MiceABC/R/VEME.wrapper2.R")
+source("/Users/delvaw/Documents/MiceABC/R/mice.wrapper.R")
 source("/Users/delvaw/Documents/MiceABC/R/00-Functions.R")
 
 source("/Users/delvaw/Documents/MiceABC/R/simpact.parallel.R")
+source("/Users/delvaw/Documents/MiceABC/R/mice.parallel.R")
+
 source("/Users/delvaw/Documents/MiceABC/R/dummy.MaC.incremental.R")
+source("/Users/delvaw/Documents/MiceABC/R/dummy.MaC.incremental.parallel.mice.R")
 
 library(dplyr)
 library(MASS)
@@ -52,7 +56,7 @@ dummy.input.vector <- c(1.1, 0.25, 0, 3, 0.23, 0.23,  # what if 1.1 becomes 1.4
                         45, 45, #45, 45,              # what if 45 becomes 60
                         -0.5, 2.8, -0.2, -0.2, -2.5, -0.52, -0.05)# c(1000, 2, 3, 4)
 x.offset <- length(dummy.input.vector)
-n.experiments <- 8
+n.experiments <- 80
 dummy.master2 <- simpact.parallel(model = VEME.wrapper2,
                              actual.input.matrix = matrix(rep(dummy.input.vector, each = n.experiments), nrow = n.experiments),
                              seed_count = 0,
@@ -170,17 +174,19 @@ predictorMatrix[1, x.offset + c(10, 11, 17)] <- 1 # relative susceptibility in y
 
       # NOTE: As it stands, each output statistic is predicted by ALL input and ALL other output statistics. That may not be a great idea, or even possible, if there is collinearity.
 
-test.VEME2.MaC.incremental <- dummy.MaC.incremental(targets.empirical = dummy.targets.empirical,
+# Test dummy.MaC.incremental, and also dummy.MaC.incremental.parallel.mice
+
+test.VEME2.MaC.incremental <- dummy.MaC.incremental.parallel.mice(targets.empirical = dummy.targets.empirical,
                                         RMSD.tol.max = 0.95,
-                                        min.givetomice = 160, # 400
-                                        n.experiments = 600, # 1000
+                                        min.givetomice = 20, # 400
+                                        n.experiments = 80, # 1000
                                         lls = c(1,  0.12, -0.3, 2.5, 0.1, 0.1, 20, 20, -0.8, 2, -0.35, -0.35, -3.6, -0.8, -0.16),
                                         uls = c(1.2, 0.37, 0.3, 3.5, 0.4, 0.4, 66, 66, -0.25, 3.9, -0.1, -0.1, -1.4, -0.3,  -0.001),
                                         model = VEME.wrapper2,
                                         strict.positive.params = c(4:8),
                                         predictorMatrix = predictorMatrix,
-                                        maxit = 10,
-                                        maxwaves = 6,
+                                        maxit = 5,
+                                        maxwaves = 2,
                                         n_cluster = 8) # 6
 #(round(l1median(head(test.MaC.incremental$selected.experiments[[length(test.MaC.incremental$selected.experiments)]]), 1), 99)[5:8] - dummy.targets.empirical[1:4]) / dummy.targets.empirical[1:4]
 #round(l1median(head(test.MaC.incremental$selected.experiments[[length(test.MaC.incremental$selected.experiments)]]), 1), 2)
