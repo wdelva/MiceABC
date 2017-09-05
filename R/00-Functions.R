@@ -17,6 +17,7 @@ library(phylosim)
 library(utils)
 library(phangorn)
 library(apTreeshape)
+library(pcaPP)
 
 #hiv.seq.raw <- read_file("/Users/delvaw/Documents/MiceABC/K03455.txt")
 #clean.hiv.seq <-  gsub("\n", "", hiv.seq.raw)
