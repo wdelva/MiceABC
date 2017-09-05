@@ -12,6 +12,8 @@
 
 #source("/Users/delvaw/Documents/MiceABC/R/VEME.wrapper.R")
 source("/Users/delvaw/Documents/MiceABC/R/VEME.wrapper2.R")
+source("/Users/delvaw/Documents/MiceABC/R/VEME.wrapper2.medians.R")
+
 source("/Users/delvaw/Documents/MiceABC/R/mice.wrapper.R")
 source("/Users/delvaw/Documents/MiceABC/R/00-Functions.R")
 
@@ -178,15 +180,15 @@ predictorMatrix[1, x.offset + c(10, 11, 17)] <- 1 # relative susceptibility in y
 
 test.VEME2.MaC.incremental <- dummy.MaC.incremental.parallel.mice(targets.empirical = dummy.targets.empirical,
                                         RMSD.tol.max = 0.95,
-                                        min.givetomice = 20, # 400
-                                        n.experiments = 80, # 1000
+                                        min.givetomice = 80, # 400
+                                        n.experiments = 320, # 1000
                                         lls = c(1,  0.12, -0.3, 2.5, 0.1, 0.1, 20, 20, -0.8, 2, -0.35, -0.35, -3.6, -0.8, -0.16),
                                         uls = c(1.2, 0.37, 0.3, 3.5, 0.4, 0.4, 66, 66, -0.25, 3.9, -0.1, -0.1, -1.4, -0.3,  -0.001),
-                                        model = VEME.wrapper2,
+                                        model = VEME.wrapper2.medians, # VEME.wrapper2,
                                         strict.positive.params = c(4:8),
                                         predictorMatrix = predictorMatrix,
                                         maxit = 5,
-                                        maxwaves = 6,
+                                        maxwaves = 10,
                                         n_cluster = 8) # 6
 #(round(l1median(head(test.MaC.incremental$selected.experiments[[length(test.MaC.incremental$selected.experiments)]]), 1), 99)[5:8] - dummy.targets.empirical[1:4]) / dummy.targets.empirical[1:4]
 #round(l1median(head(test.MaC.incremental$selected.experiments[[length(test.MaC.incremental$selected.experiments)]]), 1), 2)
