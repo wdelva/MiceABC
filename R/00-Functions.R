@@ -58,6 +58,9 @@ BIC(fit.ini)
 BIC(fit)
 
 tree4treedater <- fit$tree
+plot(tree4treedater)
+
+sts <- readRDS( system.file( 'extdata', 'h3n2_small_sampleTimes.rds', package='treedater') )
 
 
 freq <- c(0.3353293, 0.2035928, 0.2628077, (1 - sum(c(0.3353293, 0.2035928, 0.2628077))))
