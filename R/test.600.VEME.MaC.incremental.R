@@ -53,6 +53,16 @@ library(boot)
 library(data.table)
 library(parallel)
 
+install.packages("adegenet", dep = TRUE) # Still to be done on vsc
+library(adegenet) # Still to be done on vsc
+library(ade4) # Still to be done on vsc
+source("http://adegenet.r-forge.r-project.org/files/patches/auxil.R")
+
+#install.packages("devtools")
+#library(devtools)
+#install_github("emvolz/treedater") # Still to be done on vsc
+library(treedater) # Still to be done on vsc
+
 
 dummy.input.vector <- c(1.1, 0.25, 0, 3, 0.23, 0.23,  # what if 1.1 becomes 1.4
                         45, 45, #45, 45,              # what if 45 becomes 60
