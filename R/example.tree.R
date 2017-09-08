@@ -60,9 +60,23 @@ numbered.keep <- numbered.tips[as.numeric(names(tree.dat.full.GTR)) %in% sequenc
 #
 tree.dat.pruned <- subset(tree.dat.full.GTR,
                           subset = numbered.keep)# Only keep sequences of people that were alive at datalist.agemix$itable$population.simtime[1]
-  tree.ml.pruned <- dist.ml(tree.dat.pruned, model = "F81", bf = freq) # F81
+  #tree.ml.pruned <- dist.ml(tree.dat.pruned, model = "F81", bf = freq) # F81
 
   tree.sim.pruned <- nj(dist.dna(as.DNAbin(tree.dat.pruned), model = "TN93")) #nj(tree.ml.pruned) # phangorn::NJ(tree.ml.pruned) # changed upgma to neighbour-joining
+
+  tree.sim.pruned.rooted <- root(tree.sim.pruned, outgroup = 1, resolve.root = TRUE)
+
+  fit.ini.pruned <- pml(tree.sim.pruned.rooted, tree.dat.pruned, k = 4)
+
+  fit.pruned <- optim.pml(fit.ini.pruned, optNni = TRUE, optBf = TRUE, optQ = TRUE, model = "GTR", optGamma = TRUE, optEdge = FALSE, optRate = TRUE, optRooted = FALSE)
+
+
+  #plot(fit.ini.pruned)
+  plot(fit.pruned$tree, root.edge = TRUE, type = "fan", open.angle = 20, rotate.tree = 10) #fan or phylogram
+  add.scale.bar(x = 0, y = 0, length = 2, lwd = 2, lcol = "blue3", col = "blue3")
+
+  table(table(branching.times(fit.pruned$tree)))
+
 
   internal.node.times.element <- branching.times(tree.sim.pruned) # datalist.agemix$itable$hivseed.time[1] + branching.times(tree.sim.full) * (datalist.agemix$itable$population.simtime[1] - datalist.agemix$itable$hivseed.time[1])
   internal.node.times.unsorted <- c(internal.node.times, internal.node.times.element)
