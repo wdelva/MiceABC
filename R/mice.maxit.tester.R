@@ -1,17 +1,39 @@
 # mice maxit tester
 
 load(file = "/Users/delvaw/Documents/MiceABC/test.VEME2.MaC.incremental.RData")
+vsc.data.loaded <- load(file = "/Users/wimdelva/Documents/MiceABC/test.600.4waves.VEME2.MaC.increm.vsc.RData")
+dummy.targets.empirical
+test.VEME2.MaC.incremental <- test.VEME2.MaC.increm.vsc
+
+test.VEME2.MaC.increm.vsc$max.RMSD
+test.VEME2.MaC.increm.vsc$n.close.to.targets
+
+head(test.VEME2.MaC.increm.vsc$selected.experiments[[4]])
 # holds dummy.targets.empirical and test.VEME2.MaC.incremental
 library(mice)
 library(dplyr)
 library(tidyr)
 # help(mice)
 
+length(test.VEME2.MaC.increm.vsc$selected.experiments)
+
+summary(test.VEME2.MaC.incremental$selected.experiments[[1]][, 1:15])
+hist(test.VEME2.MaC.incremental$selected.experiments[[1]][, 1])
+
+pairs(test.VEME2.MaC.incremental$selected.experiments[[20]][, 1:15])
+
+
+hist(mice.guesses[, 1])
+
 off.target.factor <- 1
 
 data4mice <- test.VEME2.MaC.incremental$selected.experiments[[1]] %>% dplyr::select(., -RMSD) %>% rbind(., c(rep(NA, 15), off.target.factor * dummy.targets.empirical))
 
 str(data4mice)
+dummy.input.vector <- c(1.1, 0.25, 0, 3, 0.23, 0.23,  # what if 1.1 becomes 1.4
+                        45, 45, #45, 45,              # what if 45 becomes 60
+                        -0.5, 2.8, -0.2, -0.2, -2.5, -0.52, -0.05)# c(1000, 2, 3, 4)
+x.offset <- length(dummy.input.vector)
 
 predictorMatrix <- (1 - diag(1, length(c(dummy.input.vector, dummy.targets.empirical)))) # This is the default matrix.
 # # Let's now modify the first 15 rows of this matrix, corresponding to the indicators of predictor variables for the input variables. In brackets the values for the master model.
@@ -51,7 +73,7 @@ mice.guesses <- mice.parallel(mice.model = mice.wrapper,
                                 predictorMatrix = predictorMatrix,
                                 method = "norm",
                                 defaultMethod = "norm",
-                                maxit = 1,
+                                maxit = 5,
                                 printFlag = FALSE,
                                 seed_count = 0,
                                 n_cluster = 8,
