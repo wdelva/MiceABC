@@ -29,39 +29,6 @@ library(treedater)
 #hiv.seq.env <- substr(clean.hiv.seq, 6172,8742) # true c(6172,8742)
 #hiv.seq.env.short <- substr(clean.hiv.seq, 6172, 6271)#8742) # true c(6172,8742)
 
-data("H3N2")
-myPath <- system.file("files/usflu.fasta",package="adegenet")
-myPath2 <- system.file("data/usflu.annot.csv",package="adegenet")
-
-dna.test <- read.dna(file = myPath, format = "fasta") # See tutorial: http://adegenet.r-forge.r-project.org/files/MRC-session2-tuto.1.3.pdf
-annot <- read.csv(file = "https://raw.githubusercontent.com/reconhub/phylo-practical/master/data/usflu.annot.csv", header = TRUE, row.names = 1)
-
-D <- dist.dna(dna.test, model = "TN93")
-class(D)
-tre <- nj(D)
-plot(tre, cex = 0.6)
-tre2 <- root(tre, out = 1)
-dna2 <- as.phyDat(dna.test)
-# Initial fit
-pml(tre2, dna2, k = 4)
-
-na.posi <- which(apply(as.character(dna.test), 2, function(e) any(!e %in% c("a", "t", "g", "c"))))
-dna3 <- dna.test[, -na.posi]
-dna4 <- as.phyDat(dna3)
-tre.ini <- nj(dist.dna(dna3, model = "TN93"))
-fit.ini <- pml(tre.ini, dna4, k = 4)
-fit.ini
-
-fit <- optim.pml(fit.ini, optNni = TRUE, optBf = TRUE, optQ = TRUE, optGamma = TRUE)
-anova(fit.ini, fit)
-BIC(fit.ini)
-BIC(fit)
-
-tree4treedater <- fit$tree
-plot(tree4treedater)
-
-sts <- readRDS( system.file( 'extdata', 'h3n2_small_sampleTimes.rds', package='treedater') )
-
 
 freq <- c(0.3353293, 0.2035928, 0.2628077, (1 - sum(c(0.3353293, 0.2035928, 0.2628077))))
 rate <- list("a"=0.2, "b"=0.6, "c"=0.12,"d"=0.001, "e"=0.25, "f"=0.24)
