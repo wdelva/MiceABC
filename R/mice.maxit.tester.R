@@ -6,9 +6,9 @@ load(file = "/Users/delvaw/Documents/MiceABC/test.VEME2.MaC.incremental.RData")
 vsc.data.loaded <- load(file = "/Users/wimdelva/Documents/MiceABC/test.600.4waves.VEME2.MaC.increm.vsc.RData")
 vsc.data.loaded <- load(file = "/Users/delvaw/Documents/MiceABC/test.960.12waves.VEME2.MaC.increm.vsc.RData")
 vsc.data.loaded <- load(file = "/Users/delvaw/Documents/MiceABC/test.480.5waves.bigjumps.VEME2.MaC.increm.vsc.RData")
-vsc.data.loaded <- load(file = "/Users/delvaw/Documents/MiceABC/test.480.5waves.VEME2.nointernalnodes.MaC.increm.vsc.RData")
+vsc.data.loaded <- load(file = "/Users/wimdelva/Documents/MiceABC/test.480.6waves.VEME2.nointernalnodes.MaC.increm.vsc.RData")
 dummy.targets.empirical
-test.VEME2.MaC.incremental <- test.VEME2.MaC.increm.vsc
+test.VEME2.MaC.incremental <- test.VEME2.6waves.MaC.increm.vsc
 names(test.VEME2.MaC.incremental)
 # "intermediate.features"          "final.intermediate.features"    "new.sim.results.with.design.df" "max.RMSD"
 # "n.close.to.targets"             "selected.experiments"           "secondspassed"
@@ -22,37 +22,42 @@ test.VEME2.MaC.incremental$selected.experiments
 test.VEME2.MaC.incremental$secondspassed
 
 # Visualising the progress from wave to wave
-# Figure 1: Do the final.intermediate.features move towards the dummy.targets.empirical with every wave?
-mice.target.features.df <- data.frame(cbind(rbind(do.call(rbind, test.VEME2.MaC.incremental$final.intermediate.features),
-                                                  dummy.targets.empirical),
-                                            wave = 1:(1+length(test.VEME2.MaC.incremental$final.intermediate.features)),
-                                            empirical = c(rep(0, length(test.VEME2.MaC.incremental$final.intermediate.features)),
-                                                          1)))
+# Part 1: Do the final.intermediate.features, the medians of the experiments, [and the medians of the best 480 runs] move towards the dummy.targets.empirical with every wave?
+mice.target.features.df <- cbind(data.frame(do.call(rbind, test.VEME2.MaC.incremental$final.intermediate.features)),
+                                            wave = 1:length(test.VEME2.MaC.incremental$final.intermediate.features),
+                                            Type = "intermediate.feature4mice")
 mice.target.features.long.df <- gather(data = mice.target.features.df,
                                        key = "Feature",
                                        value = "Value",
-                                       V1:V16)
+                                       X1:X16,
+                                       factor_key = TRUE)
+# Part 2: Do the medians of the experiments move towards the dummy.targets.empirical with every wave?
+experimental.median.features.df <- cbind(data.frame(do.call(rbind, test.VEME2.MaC.incremental$intermediate.features)),
+                                                    wave = 1:length(test.VEME2.MaC.incremental$intermediate.features),
+                                                    Type = "experiment.median.features")
+experimental.median.features.long.df <- gather(data = experimental.median.features.df,
+                                               key = "Feature",
+                                               value = "Value",
+                                               X1:X16,
+                                               factor_key = TRUE)
+empirical.targets.df <- data.frame(Feature = paste0("X", 1:16), empirical.targets = dummy.targets.empirical)
 
-mice.target.features.plot <- ggplot(data = mice.target.features.long.df,
+
+#Making the plot
+mice.target.features.plot <- ggplot(data = rbind(mice.target.features.long.df,
+                                                 experimental.median.features.long.df),
                                     aes(x = wave,
                                         y = Value,
-                                        colour = factor(empirical))) +
+                                        colour = factor(Type))) +
   geom_point() +
+  scale_color_brewer(palette="Set1") +
   geom_line() +
+  geom_hline(aes(yintercept = empirical.targets), empirical.targets.df) +
   ggtitle("Median features given to MICE") +
   facet_wrap(~ Feature, nrow = 4, scales="free")
 plot(mice.target.features.plot)
 
-# Figure 2: Do the medians of the experiments move towards the dummy.targets.empirical with every wave?
-experimental.median.features.df <- data.frame(cbind(rbind(do.call(rbind, test.VEME2.MaC.incremental$intermediate.features),
-                                                          dummy.targets.empirical),
-                                                    wave = 1:(1+length(test.VEME2.MaC.incremental$intermediate.features)),
-                                                    empirical = c(rep(0, length(test.VEME2.MaC.incremental$intermediate.features)),
-                                                                  1)))
-experimental.median.features.long.df <- gather(data = experimental.median.features.df,
-                                               key = "Feature",
-                                               value = "Value",
-                                               V1:V16)
+
 
 experimental.median.features.plot <- ggplot(data = experimental.median.features.long.df,
                                             aes(x = wave,
