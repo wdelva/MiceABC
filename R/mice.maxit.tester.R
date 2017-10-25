@@ -1,14 +1,77 @@
 # mice maxit tester
+library(tidyr)
+library(ggplot2)
 
 load(file = "/Users/delvaw/Documents/MiceABC/test.VEME2.MaC.incremental.RData")
 vsc.data.loaded <- load(file = "/Users/wimdelva/Documents/MiceABC/test.600.4waves.VEME2.MaC.increm.vsc.RData")
+vsc.data.loaded <- load(file = "/Users/delvaw/Documents/MiceABC/test.960.12waves.VEME2.MaC.increm.vsc.RData")
+vsc.data.loaded <- load(file = "/Users/delvaw/Documents/MiceABC/test.480.5waves.bigjumps.VEME2.MaC.increm.vsc.RData")
+vsc.data.loaded <- load(file = "/Users/delvaw/Documents/MiceABC/test.480.5waves.VEME2.nointernalnodes.MaC.increm.vsc.RData")
 dummy.targets.empirical
 test.VEME2.MaC.incremental <- test.VEME2.MaC.increm.vsc
+names(test.VEME2.MaC.incremental)
+# "intermediate.features"          "final.intermediate.features"    "new.sim.results.with.design.df" "max.RMSD"
+# "n.close.to.targets"             "selected.experiments"           "secondspassed"
+test.VEME2.MaC.incremental$intermediate.features # the medians of the experiments in that wave
+test.VEME2.MaC.incremental$final.intermediate.features # The features used by MICE in that wave
+dummy.targets.empirical
+test.VEME2.MaC.incremental$new.sim.results.with.design.df
+test.VEME2.MaC.incremental$max.RMSD
+test.VEME2.MaC.incremental$n.close.to.targets
+test.VEME2.MaC.incremental$selected.experiments
+test.VEME2.MaC.incremental$secondspassed
+
+# Visualising the progress from wave to wave
+# Figure 1: Do the final.intermediate.features move towards the dummy.targets.empirical with every wave?
+mice.target.features.df <- data.frame(cbind(rbind(do.call(rbind, test.VEME2.MaC.incremental$final.intermediate.features),
+                                                  dummy.targets.empirical),
+                                            wave = 1:(1+length(test.VEME2.MaC.incremental$final.intermediate.features)),
+                                            empirical = c(rep(0, length(test.VEME2.MaC.incremental$final.intermediate.features)),
+                                                          1)))
+mice.target.features.long.df <- gather(data = mice.target.features.df,
+                                       key = "Feature",
+                                       value = "Value",
+                                       V1:V16)
+
+mice.target.features.plot <- ggplot(data = mice.target.features.long.df,
+                                    aes(x = wave,
+                                        y = Value,
+                                        colour = factor(empirical))) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Median features given to MICE") +
+  facet_wrap(~ Feature, nrow = 4, scales="free")
+plot(mice.target.features.plot)
+
+# Figure 2: Do the medians of the experiments move towards the dummy.targets.empirical with every wave?
+experimental.median.features.df <- data.frame(cbind(rbind(do.call(rbind, test.VEME2.MaC.incremental$intermediate.features),
+                                                          dummy.targets.empirical),
+                                                    wave = 1:(1+length(test.VEME2.MaC.incremental$intermediate.features)),
+                                                    empirical = c(rep(0, length(test.VEME2.MaC.incremental$intermediate.features)),
+                                                                  1)))
+experimental.median.features.long.df <- gather(data = experimental.median.features.df,
+                                               key = "Feature",
+                                               value = "Value",
+                                               V1:V16)
+
+experimental.median.features.plot <- ggplot(data = experimental.median.features.long.df,
+                                            aes(x = wave,
+                                                y = Value,
+                                                colour = factor(empirical))) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Median features of experiments") +
+  facet_wrap(~ Feature, nrow = 4, scales="free")
+plot(experimental.median.features.plot)
+
+
+
+
 
 test.VEME2.MaC.increm.vsc$max.RMSD
 test.VEME2.MaC.increm.vsc$n.close.to.targets
 
-head(test.VEME2.MaC.increm.vsc$selected.experiments[[4]])
+head(test.VEME2.MaC.increm.vsc$selected.experiments[[5]])
 # holds dummy.targets.empirical and test.VEME2.MaC.incremental
 library(mice)
 library(dplyr)
